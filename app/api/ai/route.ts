@@ -1,6 +1,34 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+/**
+ * Model instructions to avoid Markdown are honored inconsistently (LLMs are probabilistic,
+ * not fully compliant), so every string the UI ever shows as plain text is sanitized here
+ * regardless of what the model actually produced — belt and suspenders, applied once at the
+ * API boundary rather than re-implemented in every display component.
+ */
+function sanitizeAiText(text: string): string {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, "$1") // **bold**
+    .replace(/^\s*[-*•]\s+/gm, "• ") // normalize bullet markers before touching stray asterisks
+    .replace(/\*(.*?)\*/g, "$1") // remaining *italic*
+    .replace(/^#{1,6}\s+/gm, "") // # headers
+    .replace(/^[-*_]{3,}\s*$/gm, "") // horizontal rules
+    .replace(/```[a-z]*\n?/gi, "")
+    .replace(/`([^`]*)`/g, "$1") // inline/fenced code
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function deepSanitize<T>(value: T): T {
+  if (typeof value === "string") return sanitizeAiText(value) as unknown as T;
+  if (Array.isArray(value)) return value.map((v) => deepSanitize(v)) as unknown as T;
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, deepSanitize(v)])) as T;
+  }
+  return value;
+}
+
 const chatMessageSchema = z.object({ role: z.enum(["user", "assistant"]), content: z.string() });
 
 const requestSchema = z.discriminatedUnion("action", [
@@ -56,32 +84,31 @@ function extractJson(text: string): unknown {
   return JSON.parse(candidate.slice(first, end + 1));
 }
 
+const NO_MARKDOWN =
+  "Never use Markdown syntax anywhere in your response or in any string value: no **bold**, no # headers, no bullet characters (*, -, •), no numbered-list prefixes, no backticks, no horizontal rules. The UI displays your text as plain prose, so write plain sentences and paragraphs only — if you need to list things, do it as a short plain sentence (\"First, ...; second, ...\") or as separate array items where the schema already gives you an array.";
+
 function instructionFor(body: Body): { system: string; wantsJson: boolean } {
   if (body.action === "decompose") {
     return {
       wantsJson: true,
-      system:
-        'You are a research planning assistant. Break the user\'s question into 3 to 5 distinct research branches that together cover the question well (e.g. economic, technical, social, risk angles). Respond with ONLY JSON: {"branches":[{"title":"short branch name","description":"one sentence describing what to investigate"}]}. No prose outside the JSON.',
+      system: `You are a research planning assistant. Break the user's question into 3 to 5 distinct, non-overlapping research branches that together cover the question from its most important angles — pick whichever angles actually matter for THIS question (e.g. economic, technical, social, regulatory, risk) rather than a generic fixed template. Each branch title should be a specific, concrete noun phrase (not a vague category like "Considerations"), and its description one precise sentence naming exactly what to investigate. Respond with ONLY JSON: {"branches":[{"title":"specific branch name","description":"one precise sentence describing exactly what to investigate"}]}. No prose outside the JSON. ${NO_MARKDOWN}`,
     };
   }
   if (body.action === "chat") {
     return {
       wantsJson: false,
-      system:
-        "You are a research assistant helping investigate a specific branch of a larger question. Be concise and structured. Where relevant, distinguish factual claims, reasoning, assumptions, and open uncertainty. Do not claim to have browsed the web or cite sources you were not given — you are reasoning from general knowledge only.",
+      system: `You are a research assistant investigating one specific branch of a larger question. Be direct, concrete, and efficient: lead with the most important point in the first sentence, then support it. Where relevant, clearly separate factual claims from reasoning, assumptions, and open uncertainty (e.g. "Fact: ...", "Assumption: ...") but only when it adds real clarity, not as boilerplate. Keep the whole answer tight — well under 200 words unless the question genuinely requires more, and never pad with generic caveats or restating the question. Do not claim to have browsed the web or cite sources you were not given — you are reasoning from general knowledge only. ${NO_MARKDOWN}`,
     };
   }
   if (body.action === "synthesize") {
     return {
       wantsJson: true,
-      system:
-        'You are synthesizing multiple research findings into one insight. Respond with ONLY JSON: {"title":"short insight title","summary":"2-4 sentence synthesis","keyPoints":["point"],"supportingEvidence":["which finding(s) support this and how"],"confidence":"high|medium|low"}. Base the synthesis only on the findings given; do not invent evidence.',
+      system: `You are synthesizing multiple research findings into one precise insight. Respond with ONLY JSON: {"title":"short specific insight title, not a generic label","summary":"2-3 tight, concrete sentences stating the actual conclusion, no throat-clearing","keyPoints":["one precise, standalone-readable sentence per point, no vague filler"],"supportingEvidence":["a plain sentence naming which finding(s) support this and exactly how, e.g. 'Finding 2 shows X, which directly supports Y'"],"confidence":"high|medium|low"}. Base the synthesis strictly on the findings given — never invent evidence, and if the findings conflict or are thin, say so plainly in the summary and lower the confidence accordingly. ${NO_MARKDOWN}`,
     };
   }
   return {
     wantsJson: true,
-    system:
-      'You are a critical reviewer stress-testing a research insight. Look for contradictory evidence, weak assumptions, missing evidence, alternative explanations, and overgeneralization. Respond with ONLY JSON: {"weaknesses":["specific weakness"],"missingEvidence":"what evidence is absent","alternativeExplanation":"a plausible alternative reading","confidence":"high|medium|low (revised confidence in the original insight after this challenge)","suggestedQuestion":"one focused follow-up research question that would resolve the biggest gap"}.',
+    system: `You are a rigorous critical reviewer stress-testing a research insight. Find the strongest real objections, not generic hedging: contradictory evidence, weak or unstated assumptions, missing evidence, plausible alternative explanations, and overgeneralization. Respond with ONLY JSON: {"weaknesses":["one specific, concrete weakness per item — name the actual flaw, not a category"],"missingEvidence":"one precise sentence naming exactly what evidence is absent and why it matters","alternativeExplanation":"one concrete alternative reading of the same evidence","confidence":"high|medium|low (your honest revised confidence in the original insight after this challenge)","suggestedQuestion":"one specific, answerable follow-up research question that would resolve the single biggest gap"}. ${NO_MARKDOWN}`,
   };
 }
 
@@ -188,8 +215,8 @@ export async function POST(request: Request) {
   for (const provider of providers) {
     try {
       const { text, provider: name } = await provider();
-      if (!wantsJson) return NextResponse.json({ success: true, data: { reply: text }, provider: name, researched: false });
-      const data = parseStructured(body, text);
+      if (!wantsJson) return NextResponse.json({ success: true, data: { reply: sanitizeAiText(text) }, provider: name, researched: false });
+      const data = deepSanitize(parseStructured(body, text));
       return NextResponse.json({ success: true, data, provider: name, researched: false });
     } catch (err) {
       lastError = err;

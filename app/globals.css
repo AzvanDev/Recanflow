@@ -48,9 +48,12 @@ kbd { font-size: 10px; background: #f4f1f6; border-radius: 5px; padding: 3px 5px
 .panel-header > button:hover { background: #f0ecfa; color: #6544d8; }
 .panel-body { padding-top: 20px; }
 .panel-body p { line-height: 1.65; color: #706a78; margin: 0 0 16px; }
+.panel-body .eyebrow { display: block; margin: 0 0 8px; }
+.panel-body .eyebrow:not(:first-child) { margin-top: 4px; }
+.insight-confidence-top { margin: 0 0 16px; }
 .panel-finding-content { white-space: pre-wrap; }
 .wide { width: 100%; display: flex; justify-content: center; align-items: center; gap: 7px; }
-.panel-list { margin: 0 0 14px; padding-left: 18px; color: #554f5d; line-height: 1.6; }
+.panel-list { margin: 0 0 16px; padding-left: 18px; color: #554f5d; line-height: 1.6; }
 .panel-list li { margin-bottom: 6px; }
 .panel-error { background: #fdf1f1; border: 1px solid #f3d9d9; border-radius: 10px; padding: 10px 12px; margin-bottom: 14px; }
 .panel-error p { color: #9a3b3b; margin: 0 0 8px; }

@@ -207,15 +207,33 @@ function InsightView({ node, actions }: { node: FlowNode; actions: PanelActions 
   const { data } = node;
   return (
     <>
+      {data.confidence && (
+        <div className="node-meta insight-confidence-top">
+          <span className={`confidence ${data.confidence}`}>Confidence: {data.confidence}</span>
+        </div>
+      )}
+      <span className="eyebrow">SUMMARY</span>
       <p>{data.description}</p>
       {data.keyPoints && data.keyPoints.length > 0 && (
-        <ul className="panel-list">
-          {data.keyPoints.map((p, i) => (
-            <li key={i}>{p}</li>
-          ))}
-        </ul>
+        <>
+          <span className="eyebrow">KEY POINTS</span>
+          <ul className="panel-list">
+            {data.keyPoints.map((p, i) => (
+              <li key={i}>{p}</li>
+            ))}
+          </ul>
+        </>
       )}
-      {data.confidence && <div className="node-meta"><span className={`confidence ${data.confidence}`}>Confidence: {data.confidence}</span></div>}
+      {data.supportingEvidence && data.supportingEvidence.length > 0 && (
+        <>
+          <span className="eyebrow">SUPPORTING EVIDENCE</span>
+          <ul className="panel-list">
+            {data.supportingEvidence.map((p, i) => (
+              <li key={i}>{p}</li>
+            ))}
+          </ul>
+        </>
+      )}
       {data.status === "error" && <ErrorBanner message={data.error} onRetry={() => actions.challenge(node.id)} />}
       {!data.challenge && (
         <button className="primary wide" disabled={data.status === "loading"} onClick={() => actions.challenge(node.id)}>
