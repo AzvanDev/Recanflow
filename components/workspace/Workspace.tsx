@@ -1,51 +1,534 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { addEdge, Background, Controls, Handle, MiniMap, Position, ReactFlow, useEdgesState, useNodesState, type Connection, type Node, type NodeProps, type ReactFlowInstance } from "@xyflow/react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  addEdge,
+  Background,
+  Controls,
+  MiniMap,
+  ReactFlow,
+  useEdgesState,
+  useNodesState,
+  type Connection,
+  type Edge,
+  type ReactFlowInstance,
+} from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Bot, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, Clipboard, Command, CornerDownRight, FileText, Focus, GitBranch, Grip, Map, MessageCircle, Minimize2, MoreHorizontal, MousePointer2, Network, PanelLeft, Plus, Search, Send, Share2, Sparkles, Telescope, X, ZoomIn, ZoomOut } from "lucide-react";
-import { buildLineageContext, buildSelectedContext } from "@/lib/context";
-import { loadWorkspace, newId, saveWorkspace } from "@/lib/workspace";
-import type { FlowNodeData, NodeKind } from "@/lib/types";
+import { CircleHelp, Clipboard, Network, PanelLeft, Plus, Sparkles, ZoomIn, ZoomOut } from "lucide-react";
 
-const labels: Record<NodeKind, string> = { question: "Main question", conversation: "Conversation", research: "Research", note: "Note" };
-const icons: Record<NodeKind, typeof Sparkles> = { question: Sparkles, conversation: MessageCircle, research: Telescope, note: FileText };
-function ResearchNode({ id, data, selected }: NodeProps<Node<FlowNodeData>>) { const Icon = icons[data.kind]; return <div className={`canvas-node ${data.kind} ${selected ? "selected" : ""}`}><Handle type="target" position={Position.Left} /><div className="node-kicker"><Icon size={14} /> {labels[data.kind]} {data.status && <span className={`status ${data.status}`}>{data.status}</span>}</div><h3>{data.title}</h3><p>{data.summary || data.content || "Add a thought to this node."}</p>{data.kind === "research" && <div className="node-meta">{data.sources?.length || 0} sources · evidence ready</div>}{data.kind === "conversation" && <div className="node-meta">{data.messages?.length || 0} messages</div>}<button className="node-action" onClick={(e) => { e.stopPropagation(); data.onAction?.("branch", id); }}><Plus size={13}/> Branch</button><Handle type="source" position={Position.Right} /></div>; }
-const nodeTypes = { researchNode: ResearchNode };
-function buttonAction(kind: NodeKind) { return kind === "conversation" ? "chat" : kind === "research" ? "research" : "note"; }
-export function Workspace() {
-  const [loaded] = useState(() => typeof window !== "undefined" ? loadWorkspace() : null);
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node<FlowNodeData>>(loaded?.nodes || []);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(loaded?.edges || []);
-  const [sidebar, setSidebar] = useState(false); const [search, setSearch] = useState(false); const [onboarding, setOnboarding] = useState(false);
-  const [panel, setPanel] = useState<"home" | "chat" | "research" | "synthesis">("home"); const [panelOpen, setPanelOpen] = useState(true); const [selection, setSelection] = useState<string[]>([]); const [flow, setFlow] = useState<ReactFlowInstance<Node<FlowNodeData>> | null>(null); const [tool, setTool] = useState<"select" | "pan" | "connect">("select"); const [minimapOpen, setMinimapOpen] = useState(true); const [helpOpen, setHelpOpen] = useState(false); const [shareNotice, setShareNotice] = useState(false); const [zoom, setZoom] = useState(100);
-  const [draft, setDraft] = useState(""); const [response, setResponse] = useState(""); const [busy, setBusy] = useState(false); const [suggestions, setSuggestions] = useState<string[]>([]); const [focus, setFocus] = useState<string | null>(null);
-  useEffect(() => { if (!localStorage.getItem("recan-onboarded")) setOnboarding(true); }, []);
-  useEffect(() => { const timer = setTimeout(() => saveWorkspace({ version: 1, id: loaded?.id || "local", name: loaded?.name || "Untitled", nodes, edges, updatedAt: new Date().toISOString() }), 500); return () => clearTimeout(timer); }, [nodes, edges, loaded]);
-  const selected = useMemo(() => nodes.filter(n => selection.includes(n.id)), [nodes, selection]);
-  const addNode = useCallback((kind: NodeKind, parentId?: string, title?: string) => { const parent = nodes.find(n => n.id === parentId) || nodes.find(n => selection.includes(n.id)); const id = newId(); const shift = nodes.length % 4 * 34; const position = parent ? { x: parent.position.x + 350, y: parent.position.y + shift } : { x: 320 + shift, y: 300 + shift }; const data: FlowNodeData = { kind, title: title || (kind === "question" ? "What would you like to investigate?" : kind === "research" ? "New research question" : kind === "conversation" ? "New exploration" : "New note"), summary: kind === "research" ? "Turn this question into grounded evidence." : kind === "conversation" ? "Explore this line of thinking with AI." : undefined, content: kind === "note" ? "Capture an idea, observation, or next step." : undefined, status: "ready", messages: [], sources: [], onAction: handleAction }; setNodes(ns => [...ns, { id, type: "researchNode", position, data }]); if (parent) setEdges(es => [...es, { id: `e-${parent.id}-${id}`, source: parent.id, target: id, type: "smoothstep" }]); setSelection([id]); }, [nodes, selection, setNodes, setEdges]);
-  const callAI = useCallback(async (action: "chat" | "branches" | "synthesis" | "research", prompt: string, context: string) => { setBusy(true); setResponse(""); try { const r = await fetch("/api/ai", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, prompt, context }) }); const out = await r.json() as { text?: string; branches?: string[]; warning?: string }; if (!r.ok) throw new Error(out.warning || "AI request failed"); setResponse(out.text || ""); setSuggestions(out.branches || []); } catch { setResponse("Unable to connect to the AI service. Your workspace remains saved locally."); } finally { setBusy(false); } }, []);
-  function handleAction(action: string, id: string) { const node = nodes.find(n => n.id === id); if (!node) return; if (action === "branch") { setSelection([id]); setPanel("home"); setPanelOpen(true); callAI("branches", node.data.title, buildLineageContext(id, nodes, edges)); } }
-  const onConnect = useCallback((connection: Connection) => setEdges(es => addEdge({ ...connection, type: "smoothstep" }, es)), [setEdges]);
-  const send = () => { if (!draft.trim()) return; const context = selected.length > 1 ? buildSelectedContext(selected) : selected[0] ? buildLineageContext(selected[0].id, nodes, edges) : ""; callAI(panel === "research" ? "research" : panel === "synthesis" ? "synthesis" : "chat", draft, context); setDraft(""); };
-  const deleteSelected = () => { setNodes(ns => ns.filter(n => !selection.includes(n.id))); setEdges(es => es.filter(e => !selection.includes(e.source) && !selection.includes(e.target))); setSelection([]); };
-  const createBlankWorkspace = () => { saveWorkspace({ version: 1, id: newId("workspace"), name: "Untitled workspace", nodes: [], edges: [], updatedAt: new Date().toISOString() }); window.location.reload(); };
-  const shareWorkspace = async () => { try { await navigator.clipboard.writeText(window.location.href); } catch { /* clipboard may be blocked by the browser */ } setShareNotice(true); window.setTimeout(() => setShareNotice(false), 2200); };
-  useEffect(() => { const key = (e: KeyboardEvent) => { const tag = (e.target as HTMLElement).tagName; if (["INPUT","TEXTAREA"].includes(tag)) return; if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setSearch(true); } if (e.key === "Escape") { setSearch(false); setSelection([]); } if ((e.key === "Delete" || e.key === "Backspace") && selection.length) deleteSelected(); if (e.key.toLowerCase() === "n") addNode("note"); if (e.key.toLowerCase() === "r") { setPanel("research"); } }; window.addEventListener("keydown", key); return () => window.removeEventListener("keydown", key); });
-  return <main className="workspace"><ReactFlow<Node<FlowNodeData>> nodes={nodes.map(n => ({ ...n, data: { ...n.data, onAction: handleAction }, hidden: focus ? !(n.id === focus || edges.some(e => (e.source === focus && e.target === n.id) || (e.target === focus && e.source === n.id))) : false }))} edges={edges} nodeTypes={nodeTypes} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onInit={setFlow} onMove={(_, viewport) => setZoom(Math.round(viewport.zoom * 100))} onSelectionChange={({ nodes: ns }) => setSelection(previous => { const next = ns.map(n => n.id); return previous.length === next.length && previous.every((id, index) => id === next[index]) ? previous : next; })} onNodeDoubleClick={(_, n) => setFocus(n.id)} fitView fitViewOptions={{ padding: .22 }} selectionOnDrag={tool === "select"} panOnDrag={tool === "pan"} multiSelectionKeyCode="Shift" defaultEdgeOptions={{ type: "smoothstep" }}><Background variant={undefined} gap={22} size={1} color="#e9e7ef" />{minimapOpen && <MiniMap pannable zoomable className="minimap" />}<Controls showInteractive={false} className="flow-controls" /></ReactFlow>
-    <header className="floating top-left"><button className="brand" onClick={() => setSidebar(!sidebar)} aria-label="Open workspaces"><span className="logo"><Grip size={14}/></span><b>ReCan Flow</b></button><span className="divider"/><span>{loaded?.name || "Untitled"}</span><span className="free">Local</span><ChevronDown size={15}/></header>
-    <div className="floating top-right"><button className="ai-status" aria-label="Open AI panel" title="Open AI panel" onClick={() => setPanelOpen(true)}><Bot size={16}/><span className="ai-dot"/></button><span className="avatar">R</span><button className="share" onClick={shareWorkspace}><Share2 size={14}/> Share</button></div>
-    <button className="nav-toggle floating" onClick={() => setSidebar(!sidebar)} aria-label="Toggle navigation"><PanelLeft size={18}/></button>
-    {sidebar && <aside className="sidebar floating"><div className="side-title">Your research</div><button className="side-active"><Network size={16}/> {loaded?.name || "Untitled workspace"}</button><button onClick={() => { setSidebar(false); setSearch(true); }}><Clipboard size={16}/> Find a node</button><button onClick={() => { setSidebar(false); setOnboarding(true); }}><Sparkles size={16}/> Getting started</button><button onClick={() => setHelpOpen(true)}><CircleHelp size={16}/> Shortcuts & help</button><div className="side-spacer"/><button className="new-workspace" onClick={createBlankWorkspace}><Plus size={16}/> New workspace</button></aside>}
-    {panelOpen && <section className="ai-panel floating"><div className="panel-header"><div><span className="eyebrow">{selection.length > 1 ? "SELECTION" : selected[0] ? labels[selected[0].data.kind].toUpperCase() : "AI RESEARCH"}</span><h2>{selection.length > 1 ? `${selection.length} ideas selected` : selected[0]?.data.title || "Make your research visible"}</h2></div><button aria-label="Close AI panel" title="Close AI panel" onClick={() => setPanelOpen(false)}><X size={17}/></button></div>{selection.length > 1 ? <div className="panel-body"><p>Bring the selected ideas together without losing their nuance.</p><button className="primary wide" onClick={() => { setPanel("synthesis"); callAI("synthesis", "Synthesize these selected research nodes, separating facts, inference, assumptions, and open questions.", buildSelectedContext(selected)); }}><Sparkles size={16}/> Synthesize findings</button></div> : selected[0] ? <div className="panel-body"><p>{selected[0].data.summary || selected[0].data.content}</p><div className="action-grid"><button onClick={() => setPanel("chat")}><MessageCircle/>Continue</button><button onClick={() => handleAction("branch", selected[0].id)}><GitBranch/>Branch</button><button onClick={() => { setPanel("research"); setDraft(selected[0].data.title); }}><Telescope/>Research</button><button onClick={() => setFocus(selected[0].id)}><Focus/>Focus</button></div></div> : <div className="panel-body"><p>Start with a question, explore branches, collect evidence, then select ideas to synthesize what you learned.</p><button className="primary wide" onClick={() => addNode("question")}><Sparkles size={16}/> Start a question</button><div className="action-grid"><button onClick={() => setPanel("chat")}><MessageCircle/>Ask AI</button><button onClick={() => setPanel("research")}><Telescope/>Research</button><button onClick={() => callAI("branches", "Suggest directions for this workspace", "AI in Education") }><GitBranch/>Suggest branches</button><button onClick={() => { setPanel("synthesis"); callAI("synthesis", "Summarize this workspace", buildSelectedContext(nodes)); }}><Clipboard/>Summarize</button></div></div>}{suggestions.length > 0 && <div className="suggestions"><span className="eyebrow">SUGGESTED BRANCHES</span>{suggestions.map(s => <button key={s} onClick={() => addNode("conversation", selected[0]?.id, s)}><GitBranch size={14}/><span>{s}</span><Plus size={14}/></button>)}</div>}{(panel !== "home" || response || busy) && <div className="ai-output">{busy ? <p className="thinking"><span/> {panel === "research" ? "Building a research brief…" : "Thinking…"}</p> : response && <pre>{response}</pre>}{panel !== "home" && <div className="composer"><textarea aria-label="Ask AI" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") send(); }} placeholder={panel === "research" ? "What should we research?" : panel === "synthesis" ? "Guide the synthesis…" : "Ask anything…"}/><button className="send" onClick={send} disabled={busy || !draft.trim()} aria-label="Send"><Send size={16}/></button></div>}</div>}</section>}
-    {!panelOpen && <button className="ai-launcher floating" onClick={() => setPanelOpen(true)} aria-label="Open AI panel"><Sparkles size={18}/><span>AI</span></button>}
-    {focus && <button className="focus-exit floating" onClick={() => setFocus(null)}><ChevronLeft size={16}/> Exit focus</button>}
-    <nav className="toolbar floating"><Tool icon={MousePointer2} label="Select and multi-select" active={tool === "select"} onClick={() => setTool("select")}/><Tool icon={Network} label="Pan canvas" active={tool === "pan"} onClick={() => setTool("pan")}/><i/><Tool icon={MessageCircle} label="Create conversation" onClick={() => addNode("conversation")}/><Tool icon={Telescope} label="Create research" onClick={() => addNode("research")}/><Tool icon={FileText} label="Create note" onClick={() => addNode("note")}/><i/><Tool icon={CornerDownRight} label="Connect nodes using their side handles" active={tool === "connect"} onClick={() => setTool("connect")}/><Tool icon={MoreHorizontal} label="Fit canvas to content" onClick={() => flow?.fitView({ padding: .2, duration: 250 })}/><Tool icon={Plus} label="Add a note" onClick={() => addNode("note")}/></nav>
-    <button className="minimap-toggle floating" onClick={() => setMinimapOpen(value => !value)} aria-label={minimapOpen ? "Hide minimap" : "Show minimap"} title={minimapOpen ? "Hide minimap" : "Show minimap"}>{minimapOpen ? <Minimize2 size={16}/> : <Map size={16}/>}</button>
-    <div className="zoom floating"><button aria-label="Zoom out" onClick={() => flow?.zoomOut({ duration: 150 })}><ZoomOut size={16}/></button><span>{zoom}%</span><button aria-label="Zoom in" onClick={() => flow?.zoomIn({ duration: 150 })}><ZoomIn size={16}/></button></div><button className="help floating" aria-label="Help" onClick={() => setHelpOpen(true)}><CircleHelp size={18}/></button>
-    {search && <div className="modal-shade" onMouseDown={() => setSearch(false)}><div className="command" onMouseDown={e => e.stopPropagation()}><Search size={18}/><input autoFocus placeholder="Search your research…"/><kbd><Command size={12}/>K</kbd><div className="results">{nodes.map(n => <button key={n.id} onClick={() => { setSelection([n.id]); setSearch(false); }}><span className="result-icon">{labels[n.data.kind][0]}</span><span><b>{n.data.title}</b><small>{n.data.summary || n.data.content}</small></span><ChevronRight size={16}/></button>)}</div></div></div>}
-    {onboarding && <div className="modal-shade"><div className="welcome"><span className="logo large"><Grip size={22}/></span><span className="eyebrow">WELCOME TO RECAN FLOW</span><h1>Think in branches,<br/>not tabs.</h1><p>Turn a question into a visual research map—then follow the ideas that matter.</p><ol><li>Start with a question.</li><li>Explore branches.</li><li>Research and select findings.</li><li>Synthesize what you discovered.</li></ol><button className="primary" onClick={() => { localStorage.setItem("recan-onboarded", "1"); setOnboarding(false); }}>Get started <ChevronRight size={16}/></button></div></div>}
-    {helpOpen && <div className="modal-shade" onMouseDown={() => setHelpOpen(false)}><div className="welcome help-card" onMouseDown={event => event.stopPropagation()}><button className="dialog-close" aria-label="Close help" onClick={() => setHelpOpen(false)}><X size={17}/></button><span className="eyebrow">QUICK GUIDE</span><h1>Build your map.</h1><p>Choose Select to marquee ideas, or Pan to move through the canvas. Drag a node’s edge handle onto another node to connect them.</p><ol><li><b>N</b> adds a note.</li><li><b>R</b> opens research.</li><li><b>Ctrl / Cmd + K</b> searches nodes.</li><li><b>Delete</b> removes selected nodes.</li><li><b>Double-click a node</b> to focus it.</li></ol><button className="primary" onClick={() => setHelpOpen(false)}>Got it <ChevronRight size={16}/></button></div></div>}
-    {shareNotice && <div className="share-toast floating"><Clipboard size={15}/> Link copied to clipboard</div>}
-  </main>;
+import { loadWorkspace, newId, saveWorkspace } from "@/lib/workspace";
+import { buildLineageContext } from "@/lib/context";
+import { layoutChildrenBelow, layoutChildOf, layoutBelowGroup, viewportCenterPosition } from "@/lib/layout";
+import { callAI } from "@/lib/ai-client";
+import type { ChatMessage, Confidence, FlowNode, FlowNodeData, NodeAction, NodeKind } from "@/lib/types";
+import { useHistory } from "@/lib/history";
+
+import { QuestionNode } from "./nodes/QuestionNode";
+import { BranchNode } from "./nodes/BranchNode";
+import { ResearchNode } from "./nodes/ResearchNode";
+import { FindingNode } from "./nodes/FindingNode";
+import { InsightNode } from "./nodes/InsightNode";
+import { NoteNode } from "./nodes/NoteNode";
+import { TextNode } from "./nodes/TextNode";
+import { TopLeftHeader, TopRightControls, ShareToast } from "./Header";
+import { Toolbar, type Tool } from "./Toolbar";
+import { EmptyState } from "./EmptyState";
+import { AIResearchPanel, type PanelActions } from "./AIResearchPanel";
+import { CommandPalette } from "./CommandPalette";
+import { OnboardingModal, HelpModal } from "./Modals";
+
+const nodeTypes = { question: QuestionNode, branch: BranchNode, research: ResearchNode, finding: FindingNode, insight: InsightNode, note: NoteNode, text: TextNode };
+
+function findAncestorOfKind(id: string, kind: NodeKind, nodes: FlowNode[], edges: Edge[]): FlowNode | undefined {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  let cursor = id;
+  for (let i = 0; i < 8; i++) {
+    const parentId = edges.find((e) => e.target === cursor)?.source;
+    if (!parentId) return undefined;
+    const parent = byId.get(parentId);
+    if (parent?.data.kind === kind) return parent;
+    cursor = parentId;
+  }
+  return undefined;
 }
-function Tool({ icon: Icon, label, active, onClick }: { icon: typeof Plus; label: string; active?: boolean; onClick?: () => void }) { return <button className={active ? "active" : ""} aria-label={label} title={label} onClick={onClick}><Icon size={18}/></button>; }
+
+function summarize(text: string, max = 70) {
+  const clean = text.trim().replace(/\s+/g, " ");
+  const firstSentence = clean.split(/(?<=[.!?])\s/)[0] || clean;
+  return firstSentence.length > max ? `${firstSentence.slice(0, max - 1)}…` : firstSentence;
+}
+
+export function Workspace() {
+  const [loaded] = useState(() => (typeof window !== "undefined" ? loadWorkspace() : null));
+  const [workspaceId] = useState(() => loaded?.id || newId("workspace"));
+  const [workspaceName, setWorkspaceName] = useState(loaded?.name || "Untitled workspace");
+  const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(loaded?.nodes || []);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(loaded?.edges || []);
+
+  const nodesRef = useRef(nodes);
+  const edgesRef = useRef(edges);
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
+  useEffect(() => {
+    edgesRef.current = edges;
+  }, [edges]);
+
+  const [selection, setSelection] = useState<string[]>([]);
+  const [tool, setTool] = useState<Tool>("select");
+  const [spaceHeld, setSpaceHeld] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(true);
+  const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
+  const [flow, setFlow] = useState<ReactFlowInstance<FlowNode> | null>(null);
+  const [zoom, setZoom] = useState(100);
+  const [sidebar, setSidebar] = useState(false);
+  const [search, setSearch] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [onboarding, setOnboarding] = useState(false);
+  const [shareNotice, setShareNotice] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [synthesizing, setSynthesizing] = useState(false);
+
+  const { undo, redo, canUndo, canRedo } = useHistory(nodes, edges, setNodes, setEdges);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && !localStorage.getItem("recan-onboarded")) setOnboarding(true);
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => saveWorkspace({ version: 2, id: workspaceId, name: workspaceName, nodes, edges, updatedAt: new Date().toISOString() }), 500);
+    return () => clearTimeout(timer);
+  }, [nodes, edges, workspaceId, workspaceName]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 3200);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  const selectedNodes = useMemo(() => nodes.filter((n) => selection.includes(n.id)), [nodes, selection]);
+  const canSaveFinding = selectedNodes.length === 1 && selectedNodes[0].data.kind === "research" && (selectedNodes[0].data.messages || []).some((m) => m.role === "assistant");
+  const canSynthesize = selectedNodes.length >= 2 && selectedNodes.every((n) => n.data.kind === "finding");
+
+  // -- low-level mutation helpers, kept in sync with refs so chained calls within one handler never read stale state --
+  const pushNodes = useCallback((newNodes: FlowNode[], newEdges: Edge[] = []) => {
+    setNodes((prev) => [...prev, ...newNodes]);
+    nodesRef.current = [...nodesRef.current, ...newNodes];
+    if (newEdges.length) {
+      setEdges((prev) => [...prev, ...newEdges]);
+      edgesRef.current = [...edgesRef.current, ...newEdges];
+    }
+  }, [setNodes, setEdges]);
+
+  const patchNode = useCallback((id: string, patch: Partial<FlowNodeData> | ((data: FlowNodeData) => Partial<FlowNodeData>)) => {
+    const apply = (n: FlowNode) => (n.id === id ? { ...n, data: { ...n.data, ...(typeof patch === "function" ? patch(n.data) : patch) } } : n);
+    setNodes((prev) => prev.map(apply));
+    nodesRef.current = nodesRef.current.map(apply);
+  }, [setNodes]);
+
+  // -- node creation --
+  const addQuestion = useCallback((position?: { x: number; y: number }, title = "") => {
+    const id = newId("question");
+    const pos = position || viewportCenterPosition(flow, "question");
+    pushNodes([{ id, type: "question", position: pos, data: { kind: "question", title, status: "idle" } }]);
+    setSelection([id]);
+    setFocusNodeId(id);
+    setPanelOpen(true);
+    return id;
+  }, [flow, pushNodes]);
+
+  const addNote = useCallback((position?: { x: number; y: number }) => {
+    const id = newId("note");
+    const pos = position || viewportCenterPosition(flow, "note");
+    pushNodes([{ id, type: "note", position: pos, data: { kind: "note", title: "Note", content: "" } }]);
+    setSelection([id]);
+    setFocusNodeId(id);
+  }, [flow, pushNodes]);
+
+  const addText = useCallback((position?: { x: number; y: number }) => {
+    const id = newId("text");
+    const pos = position || viewportCenterPosition(flow, "text");
+    pushNodes([{ id, type: "text", position: pos, data: { kind: "text", title: "", content: "" } }]);
+    setSelection([id]);
+    setFocusNodeId(id);
+  }, [flow, pushNodes]);
+
+  const addStandaloneResearch = useCallback(() => {
+    const id = newId("research");
+    const pos = viewportCenterPosition(flow, "research");
+    pushNodes([{ id, type: "research", position: pos, data: { kind: "research", title: "", description: "Define what to research, then ask a question.", status: "idle", messages: [], findingIds: [] } }]);
+    setSelection([id]);
+    setPanelOpen(true);
+  }, [flow, pushNodes]);
+
+  // -- AI-backed actions --
+  const explore = useCallback(async (questionId: string) => {
+    const question = nodesRef.current.find((n) => n.id === questionId);
+    if (!question || !question.data.title.trim()) return;
+    patchNode(questionId, { status: "loading", error: undefined });
+    try {
+      const { branches } = await callAI({ action: "decompose", question: question.data.title });
+      const parent = nodesRef.current.find((n) => n.id === questionId)!;
+      const positions = layoutChildrenBelow(nodesRef.current, parent, "branch", branches.length);
+      const ids = branches.map(() => newId("branch"));
+      const newNodes: FlowNode[] = branches.map((b, i) => ({ id: ids[i], type: "branch", position: positions[i], data: { kind: "branch", title: b.title, description: b.description } }));
+      const newEdges: Edge[] = ids.map((bid) => ({ id: `e-${questionId}-${bid}`, source: questionId, target: bid, type: "smoothstep" }));
+      pushNodes(newNodes, newEdges);
+      patchNode(questionId, { status: "idle" });
+      window.setTimeout(() => flow?.fitView({ padding: 0.25, duration: 350 }), 60);
+    } catch (err) {
+      patchNode(questionId, { status: "error", error: err instanceof Error ? err.message : "Could not generate branches." });
+    }
+  }, [patchNode, pushNodes, flow]);
+
+  const openResearch = useCallback((id: string) => {
+    const node = nodesRef.current.find((n) => n.id === id);
+    if (!node) return;
+    if (node.data.kind === "research") {
+      setSelection([id]);
+      setPanelOpen(true);
+      return;
+    }
+    if (node.data.kind !== "branch") return;
+    const existingEdge = edgesRef.current.find((e) => e.source === id && nodesRef.current.find((n) => n.id === e.target)?.data.kind === "research");
+    if (existingEdge) {
+      setSelection([existingEdge.target]);
+      setPanelOpen(true);
+      return;
+    }
+    const question = findAncestorOfKind(id, "question", nodesRef.current, edgesRef.current);
+    const researchId = newId("research");
+    const pos = layoutChildOf(nodesRef.current, node, "research");
+    pushNodes(
+      [
+        {
+          id: researchId,
+          type: "research",
+          position: pos,
+          data: {
+            kind: "research",
+            title: node.data.title,
+            description: node.data.description,
+            status: "idle",
+            messages: [],
+            findingIds: [],
+            provenance: { branchId: id, branchTitle: node.data.title, questionId: question?.id, questionTitle: question?.data.title },
+          },
+        },
+      ],
+      [{ id: `e-${id}-${researchId}`, source: id, target: researchId, type: "smoothstep" }],
+    );
+    setSelection([researchId]);
+    setPanelOpen(true);
+  }, [pushNodes]);
+
+  const sendChat = useCallback(async (researchId: string, message: string) => {
+    const research = nodesRef.current.find((n) => n.id === researchId);
+    if (!research) return;
+    const history: ChatMessage[] = research.data.messages || [];
+    const context = buildLineageContext(researchId, nodesRef.current, edgesRef.current);
+    const userMessage: ChatMessage = { id: newId("msg"), role: "user", content: message };
+    patchNode(researchId, (d) => ({ status: "loading", error: undefined, messages: [...(d.messages || []), userMessage] }));
+    try {
+      const { reply } = await callAI({ action: "chat", topic: research.data.title, context, history, message });
+      patchNode(researchId, (d) => ({ status: "idle", messages: [...(d.messages || []), { id: newId("msg"), role: "assistant", content: reply }] }));
+    } catch (err) {
+      patchNode(researchId, { status: "error", error: err instanceof Error ? err.message : "The research assistant is unavailable." });
+    }
+  }, [patchNode]);
+
+  const saveFinding = useCallback((researchId: string, content: string) => {
+    const research = nodesRef.current.find((n) => n.id === researchId);
+    if (!research) return;
+    const findingId = newId("finding");
+    const pos = layoutChildOf(nodesRef.current, research, "finding");
+    pushNodes(
+      [{ id: findingId, type: "finding", position: pos, data: { kind: "finding", title: summarize(content), content, provenance: research.data.provenance ? { ...research.data.provenance, researchId } : { researchId } } }],
+      [{ id: `e-${researchId}-${findingId}`, source: researchId, target: findingId, type: "smoothstep" }],
+    );
+    patchNode(researchId, (d) => ({ findingIds: [...(d.findingIds || []), findingId] }));
+    setToast("Finding added to canvas");
+  }, [pushNodes, patchNode]);
+
+  const synthesize = useCallback(async (findingIds: string[]) => {
+    const findings = nodesRef.current.filter((n) => findingIds.includes(n.id));
+    if (findings.length < 2) return;
+    setSynthesizing(true);
+    try {
+      const context = buildLineageContext(findings[0].id, nodesRef.current, edgesRef.current);
+      const result = await callAI({ action: "synthesize", context, findings: findings.map((f) => ({ title: f.data.title, content: f.data.content || "" })) });
+      const pos = layoutBelowGroup(nodesRef.current, findings, "insight");
+      const insightId = newId("insight");
+      pushNodes(
+        [{ id: insightId, type: "insight", position: pos, data: { kind: "insight", title: result.title, description: result.summary, keyPoints: result.keyPoints, supportingEvidence: result.supportingEvidence, confidence: result.confidence as Confidence, findingIds, status: "idle" } }],
+        findingIds.map((fid) => ({ id: `e-${fid}-${insightId}`, source: fid, target: insightId, type: "smoothstep" })),
+      );
+      setSelection([insightId]);
+      setPanelOpen(true);
+      window.setTimeout(() => flow?.fitView({ padding: 0.25, duration: 350 }), 60);
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Could not synthesize these findings.");
+    } finally {
+      setSynthesizing(false);
+    }
+  }, [pushNodes, flow]);
+
+  const challenge = useCallback(async (insightId: string) => {
+    const insight = nodesRef.current.find((n) => n.id === insightId);
+    if (!insight) return;
+    patchNode(insightId, { status: "loading", error: undefined });
+    try {
+      const result = await callAI({ action: "challenge", insightTitle: insight.data.title, insightSummary: insight.data.description || "", keyPoints: insight.data.keyPoints || [] });
+      patchNode(insightId, { status: "idle", challenge: result });
+    } catch (err) {
+      patchNode(insightId, { status: "error", error: err instanceof Error ? err.message : "Could not challenge this insight." });
+    }
+  }, [patchNode]);
+
+  const createQuestionFromChallenge = useCallback((insightId: string) => {
+    const insight = nodesRef.current.find((n) => n.id === insightId);
+    if (!insight?.data.challenge) return;
+    const id = newId("question");
+    const pos = layoutChildOf(nodesRef.current, insight, "question");
+    pushNodes([{ id, type: "question", position: pos, data: { kind: "question", title: insight.data.challenge.suggestedQuestion, status: "idle" } }], [{ id: `e-${insightId}-${id}`, source: insightId, target: id, type: "smoothstep" }]);
+    setSelection([id]);
+    setFocusNodeId(id);
+    setPanelOpen(true);
+    window.setTimeout(() => flow?.fitView({ padding: 0.25, duration: 350 }), 60);
+  }, [pushNodes, flow]);
+
+  const selectNode = useCallback((id: string) => {
+    setSelection([id]);
+    setPanelOpen(true);
+    flow?.fitView({ nodes: [{ id }], padding: 0.5, duration: 300, maxZoom: 1 });
+  }, [flow]);
+
+  const handleAction = useCallback((action: NodeAction, id: string, payload?: unknown) => {
+    if (action === "editTitle") patchNode(id, { title: String(payload ?? "") });
+    else if (action === "editContent") patchNode(id, { content: String(payload ?? "") });
+    else if (action === "explore" || action === "retryExplore") explore(id);
+    else if (action === "openResearch" || action === "openBranch") openResearch(id);
+    else if (action === "challenge") challenge(id);
+    else if (action === "createQuestionFromChallenge") createQuestionFromChallenge(id);
+  }, [patchNode, explore, openResearch, challenge, createQuestionFromChallenge]);
+
+  const panelActions: PanelActions = useMemo(() => ({
+    explore,
+    openResearch,
+    sendChat,
+    saveFinding,
+    synthesize,
+    challenge,
+    createQuestionFromChallenge,
+    selectNode,
+    startQuestion: () => addQuestion(),
+  }), [explore, openResearch, sendChat, saveFinding, synthesize, challenge, createQuestionFromChallenge, selectNode, addQuestion]);
+
+  const onConnect = useCallback((connection: Connection) => {
+    setEdges((es) => addEdge({ ...connection, type: "smoothstep" }, es));
+  }, [setEdges]);
+
+  const deleteSelected = useCallback(() => {
+    if (!selection.length) return;
+    setNodes((ns) => ns.filter((n) => !selection.includes(n.id)));
+    setEdges((es) => es.filter((e) => !selection.includes(e.source) && !selection.includes(e.target)));
+    setSelection([]);
+  }, [selection, setNodes, setEdges]);
+
+  const createBlankWorkspace = () => {
+    if (nodes.length > 0 && !window.confirm("Start a new workspace? This clears the current canvas.")) return;
+    setNodes([]);
+    setEdges([]);
+    setSelection([]);
+    setSidebar(false);
+  };
+
+  const shareWorkspace = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+    } catch {
+      // clipboard access may be blocked by the browser; the notice still confirms the intent
+    }
+    setShareNotice(true);
+    window.setTimeout(() => setShareNotice(false), 2200);
+  };
+
+  const runSaveFinding = () => {
+    if (!canSaveFinding) return;
+    const research = selectedNodes[0];
+    const last = [...(research.data.messages || [])].reverse().find((m) => m.role === "assistant");
+    if (last) saveFinding(research.id, last.content);
+  };
+
+  const runSynthesize = () => {
+    if (canSynthesize) synthesize(selectedNodes.map((n) => n.id));
+    else setToast("Select at least 2 findings to create an insight.");
+  };
+
+  const runResearchTool = () => {
+    if (selectedNodes.length === 1 && (selectedNodes[0].data.kind === "branch" || selectedNodes[0].data.kind === "research")) openResearch(selectedNodes[0].id);
+    else addStandaloneResearch();
+  };
+
+  // -- keyboard shortcuts --
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement;
+      const typing = ["INPUT", "TEXTAREA"].includes(target.tagName) || target.isContentEditable;
+      if (e.code === "Space" && !typing) setSpaceHeld(true);
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearch(true);
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if (typing) return;
+      if (e.key === "Escape") {
+        setSearch(false);
+        setHelpOpen(false);
+        setSelection([]);
+      } else if ((e.key === "Delete" || e.key === "Backspace") && selection.length) {
+        deleteSelected();
+      } else if (e.key.toLowerCase() === "v") setTool("select");
+      else if (e.key.toLowerCase() === "h") setTool("hand");
+      else if (e.key.toLowerCase() === "q") addQuestion();
+      else if (e.key.toLowerCase() === "n") addNote();
+      else if (e.key.toLowerCase() === "r") runResearchTool();
+      else if (e.key.toLowerCase() === "f") runSaveFinding();
+      else if (e.key.toLowerCase() === "i") runSynthesize();
+    }
+    function onKeyUp(e: KeyboardEvent) {
+      if (e.code === "Space") setSpaceHeld(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  });
+
+  const renderNodes = useMemo(
+    () => nodes.map((n) => ({ ...n, data: { ...n.data, onAction: handleAction, autoFocus: n.id === focusNodeId } })),
+    [nodes, handleAction, focusNodeId],
+  );
+
+  const effectiveTool: Tool = spaceHeld ? "hand" : tool;
+
+  return (
+    <main className="workspace">
+      <ReactFlow<FlowNode>
+        nodes={renderNodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        onInit={setFlow}
+        onMove={(_, viewport) => setZoom(Math.round(viewport.zoom * 100))}
+        onSelectionChange={({ nodes: ns }) =>
+          setSelection((previous) => {
+            const next = ns.map((n) => n.id);
+            if (next.length) setPanelOpen(true);
+            return previous.length === next.length && previous.every((id, index) => id === next[index]) ? previous : next;
+          })
+        }
+        fitView
+        fitViewOptions={{ padding: 0.3 }}
+        selectionOnDrag={effectiveTool === "select"}
+        panOnDrag={effectiveTool === "hand" || spaceHeld}
+        multiSelectionKeyCode="Shift"
+        defaultEdgeOptions={{ type: "smoothstep" }}
+      >
+        <Background gap={22} size={1} color="#e9e7ef" />
+        <MiniMap pannable zoomable className="minimap" />
+        <Controls showInteractive={false} className="flow-controls" />
+      </ReactFlow>
+
+      {nodes.length === 0 && <EmptyState onStart={(question) => { const id = addQuestion(undefined, question); explore(id); }} />}
+
+      <TopLeftHeader workspaceName={workspaceName} onRename={setWorkspaceName} onToggleSidebar={() => setSidebar((v) => !v)} />
+      <TopRightControls onOpenPanel={() => setPanelOpen(true)} onShare={shareWorkspace} />
+      <button className="nav-toggle floating" onClick={() => setSidebar((v) => !v)} aria-label="Toggle navigation">
+        <PanelLeft size={18} />
+      </button>
+
+      {sidebar && (
+        <aside className="sidebar floating">
+          <div className="side-title">Your research</div>
+          <button className="side-active">
+            <Network size={16} /> {workspaceName}
+          </button>
+          <button onClick={() => { setSidebar(false); setSearch(true); }}>
+            <Clipboard size={16} /> Find a node
+          </button>
+          <button onClick={() => { setSidebar(false); setOnboarding(true); }}>
+            <Sparkles size={16} /> Getting started
+          </button>
+          <button onClick={() => setHelpOpen(true)}>
+            <CircleHelp size={16} /> Shortcuts &amp; help
+          </button>
+          <div className="side-spacer" />
+          <button className="new-workspace" onClick={createBlankWorkspace}>
+            <Plus size={16} /> New workspace
+          </button>
+        </aside>
+      )}
+
+      <AIResearchPanel selected={selectedNodes} open={panelOpen} onClose={() => setPanelOpen(false)} actions={panelActions} synthesizing={synthesizing} />
+      {!panelOpen && (
+        <button className="ai-launcher floating" onClick={() => setPanelOpen(true)} aria-label="Open AI panel">
+          <Sparkles size={18} />
+          <span>AI</span>
+        </button>
+      )}
+
+      <Toolbar
+        tool={effectiveTool}
+        onSelectTool={setTool}
+        onCreateQuestion={() => addQuestion()}
+        onCreateNote={() => addNote()}
+        onCreateResearch={runResearchTool}
+        onSaveFinding={runSaveFinding}
+        canSaveFinding={canSaveFinding}
+        onSynthesize={runSynthesize}
+        canSynthesize={canSynthesize}
+        onCreateText={() => addText()}
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={canUndo}
+        canRedo={canRedo}
+      />
+
+      <div className="zoom floating">
+        <button aria-label="Zoom out" onClick={() => flow?.zoomOut({ duration: 150 })}>
+          <ZoomOut size={16} />
+        </button>
+        <span>{zoom}%</span>
+        <button aria-label="Zoom in" onClick={() => flow?.zoomIn({ duration: 150 })}>
+          <ZoomIn size={16} />
+        </button>
+      </div>
+      <button className="help floating" aria-label="Help" onClick={() => setHelpOpen(true)}>
+        <CircleHelp size={18} />
+      </button>
+
+      {search && <CommandPalette nodes={nodes} onClose={() => setSearch(false)} onSelect={selectNode} />}
+      {onboarding && (
+        <OnboardingModal
+          onDone={() => {
+            localStorage.setItem("recan-onboarded", "1");
+            setOnboarding(false);
+          }}
+        />
+      )}
+      {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
+      {shareNotice && <ShareToast />}
+      {toast && <div className="toast floating">{toast}</div>}
+    </main>
+  );
+}
