@@ -13,15 +13,13 @@ export function useHistory(nodes: FlowNode[], edges: Edge[], setNodes: (nodes: F
   const past = useRef<Snapshot[]>([]);
   const future = useRef<Snapshot[]>([]);
   const lastCommitted = useRef<Snapshot>({ nodes, edges });
-  const isFirst = useRef(true);
   const skipNext = useRef(false);
   const [, setVersion] = useState(0);
 
   useEffect(() => {
-    if (isFirst.current) {
-      isFirst.current = false;
-      return;
-    }
+    // Reference equality (not a "first render" flag) correctly no-ops React StrictMode's
+    // double-invocation of this effect in dev, since it re-fires with the exact same arrays.
+    if (nodes === lastCommitted.current.nodes && edges === lastCommitted.current.edges) return;
     if (skipNext.current) {
       skipNext.current = false;
       lastCommitted.current = { nodes, edges };

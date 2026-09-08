@@ -141,7 +141,7 @@ async function callGemini(body: Body): Promise<{ text: string; provider: "gemini
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error("no-gemini-key");
   const { system } = instructionFor(body);
-  const model = "gemini-2.0-flash";
+  const model = "gemini-3.6-flash";
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -163,7 +163,7 @@ async function callGroq(body: Body): Promise<{ text: string; provider: "groq" }>
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
     body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
+      model: "openai/gpt-oss-120b",
       messages: [{ role: "system", content: system }, { role: "user", content: userContentFor(body) }],
       temperature: 0.4,
     }),

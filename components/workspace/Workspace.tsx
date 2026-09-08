@@ -66,6 +66,7 @@ export function Workspace() {
 
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
+  const lastSelectionRef = useRef<string[]>([]);
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
@@ -73,10 +74,9 @@ export function Workspace() {
     edgesRef.current = edges;
   }, [edges]);
 
-  const [selection, setSelection] = useState<string[]>([]);
   const [tool, setTool] = useState<Tool>("select");
   const [spaceHeld, setSpaceHeld] = useState(false);
-  const [panelOpen, setPanelOpen] = useState(true);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
   const [flow, setFlow] = useState<ReactFlowInstance<FlowNode> | null>(null);
   const [zoom, setZoom] = useState(100);
@@ -105,7 +105,11 @@ export function Workspace() {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  const selectedNodes = useMemo(() => nodes.filter((n) => selection.includes(n.id)), [nodes, selection]);
+  // Selection lives on node.selected (the same field XYFlow's own onNodesChange updates for
+  // user clicks) rather than in separate state, so programmatic selection and click-driven
+  // selection never fight each other.
+  const selectedNodes = useMemo(() => nodes.filter((n) => n.selected), [nodes]);
+  const selection = useMemo(() => selectedNodes.map((n) => n.id), [selectedNodes]);
   const canSaveFinding = selectedNodes.length === 1 && selectedNodes[0].data.kind === "research" && (selectedNodes[0].data.messages || []).some((m) => m.role === "assistant");
   const canSynthesize = selectedNodes.length >= 2 && selectedNodes.every((n) => n.data.kind === "finding");
 
@@ -125,40 +129,48 @@ export function Workspace() {
     nodesRef.current = nodesRef.current.map(apply);
   }, [setNodes]);
 
+  // Selects exactly these node ids by writing node.selected directly, the same field XYFlow
+  // itself updates on a user click — keeps programmatic and click-driven selection consistent.
+  const selectOnly = useCallback((ids: string[]) => {
+    const idSet = new Set(ids);
+    const apply = (n: FlowNode) => ({ ...n, selected: idSet.has(n.id) });
+    setNodes((prev) => prev.map(apply));
+    nodesRef.current = nodesRef.current.map(apply);
+    if (ids.length) setPanelOpen(true);
+  }, [setNodes]);
+
   // -- node creation --
   const addQuestion = useCallback((position?: { x: number; y: number }, title = "") => {
     const id = newId("question");
     const pos = position || viewportCenterPosition(flow, "question");
     pushNodes([{ id, type: "question", position: pos, data: { kind: "question", title, status: "idle" } }]);
-    setSelection([id]);
+    selectOnly([id]);
     setFocusNodeId(id);
-    setPanelOpen(true);
     return id;
-  }, [flow, pushNodes]);
+  }, [flow, pushNodes, selectOnly]);
 
   const addNote = useCallback((position?: { x: number; y: number }) => {
     const id = newId("note");
     const pos = position || viewportCenterPosition(flow, "note");
     pushNodes([{ id, type: "note", position: pos, data: { kind: "note", title: "Note", content: "" } }]);
-    setSelection([id]);
+    selectOnly([id]);
     setFocusNodeId(id);
-  }, [flow, pushNodes]);
+  }, [flow, pushNodes, selectOnly]);
 
   const addText = useCallback((position?: { x: number; y: number }) => {
     const id = newId("text");
     const pos = position || viewportCenterPosition(flow, "text");
     pushNodes([{ id, type: "text", position: pos, data: { kind: "text", title: "", content: "" } }]);
-    setSelection([id]);
+    selectOnly([id]);
     setFocusNodeId(id);
-  }, [flow, pushNodes]);
+  }, [flow, pushNodes, selectOnly]);
 
   const addStandaloneResearch = useCallback(() => {
     const id = newId("research");
     const pos = viewportCenterPosition(flow, "research");
     pushNodes([{ id, type: "research", position: pos, data: { kind: "research", title: "", description: "Define what to research, then ask a question.", status: "idle", messages: [], findingIds: [] } }]);
-    setSelection([id]);
-    setPanelOpen(true);
-  }, [flow, pushNodes]);
+    selectOnly([id]);
+  }, [flow, pushNodes, selectOnly]);
 
   // -- AI-backed actions --
   const explore = useCallback(async (questionId: string) => {
@@ -184,15 +196,13 @@ export function Workspace() {
     const node = nodesRef.current.find((n) => n.id === id);
     if (!node) return;
     if (node.data.kind === "research") {
-      setSelection([id]);
-      setPanelOpen(true);
+      selectOnly([id]);
       return;
     }
     if (node.data.kind !== "branch") return;
     const existingEdge = edgesRef.current.find((e) => e.source === id && nodesRef.current.find((n) => n.id === e.target)?.data.kind === "research");
     if (existingEdge) {
-      setSelection([existingEdge.target]);
-      setPanelOpen(true);
+      selectOnly([existingEdge.target]);
       return;
     }
     const question = findAncestorOfKind(id, "question", nodesRef.current, edgesRef.current);
@@ -217,9 +227,8 @@ export function Workspace() {
       ],
       [{ id: `e-${id}-${researchId}`, source: id, target: researchId, type: "smoothstep" }],
     );
-    setSelection([researchId]);
-    setPanelOpen(true);
-  }, [pushNodes]);
+    selectOnly([researchId]);
+  }, [pushNodes, selectOnly]);
 
   const sendChat = useCallback(async (researchId: string, message: string) => {
     const research = nodesRef.current.find((n) => n.id === researchId);
@@ -262,15 +271,14 @@ export function Workspace() {
         [{ id: insightId, type: "insight", position: pos, data: { kind: "insight", title: result.title, description: result.summary, keyPoints: result.keyPoints, supportingEvidence: result.supportingEvidence, confidence: result.confidence as Confidence, findingIds, status: "idle" } }],
         findingIds.map((fid) => ({ id: `e-${fid}-${insightId}`, source: fid, target: insightId, type: "smoothstep" })),
       );
-      setSelection([insightId]);
-      setPanelOpen(true);
+      selectOnly([insightId]);
       window.setTimeout(() => flow?.fitView({ padding: 0.25, duration: 350 }), 60);
     } catch (err) {
       setToast(err instanceof Error ? err.message : "Could not synthesize these findings.");
     } finally {
       setSynthesizing(false);
     }
-  }, [pushNodes, flow]);
+  }, [pushNodes, flow, selectOnly]);
 
   const challenge = useCallback(async (insightId: string) => {
     const insight = nodesRef.current.find((n) => n.id === insightId);
@@ -290,17 +298,15 @@ export function Workspace() {
     const id = newId("question");
     const pos = layoutChildOf(nodesRef.current, insight, "question");
     pushNodes([{ id, type: "question", position: pos, data: { kind: "question", title: insight.data.challenge.suggestedQuestion, status: "idle" } }], [{ id: `e-${insightId}-${id}`, source: insightId, target: id, type: "smoothstep" }]);
-    setSelection([id]);
+    selectOnly([id]);
     setFocusNodeId(id);
-    setPanelOpen(true);
     window.setTimeout(() => flow?.fitView({ padding: 0.25, duration: 350 }), 60);
-  }, [pushNodes, flow]);
+  }, [pushNodes, flow, selectOnly]);
 
   const selectNode = useCallback((id: string) => {
-    setSelection([id]);
-    setPanelOpen(true);
+    selectOnly([id]);
     flow?.fitView({ nodes: [{ id }], padding: 0.5, duration: 300, maxZoom: 1 });
-  }, [flow]);
+  }, [flow, selectOnly]);
 
   const handleAction = useCallback((action: NodeAction, id: string, payload?: unknown) => {
     if (action === "editTitle") patchNode(id, { title: String(payload ?? "") });
@@ -327,18 +333,17 @@ export function Workspace() {
     setEdges((es) => addEdge({ ...connection, type: "smoothstep" }, es));
   }, [setEdges]);
 
+  const hasDeletableSelection = selection.length > 0 || edges.some((e) => e.selected);
+
   const deleteSelected = useCallback(() => {
-    if (!selection.length) return;
-    setNodes((ns) => ns.filter((n) => !selection.includes(n.id)));
-    setEdges((es) => es.filter((e) => !selection.includes(e.source) && !selection.includes(e.target)));
-    setSelection([]);
+    setNodes((ns) => ns.filter((n) => !n.selected));
+    setEdges((es) => es.filter((e) => !e.selected && !selection.includes(e.source) && !selection.includes(e.target)));
   }, [selection, setNodes, setEdges]);
 
   const createBlankWorkspace = () => {
     if (nodes.length > 0 && !window.confirm("Start a new workspace? This clears the current canvas.")) return;
     setNodes([]);
     setEdges([]);
-    setSelection([]);
     setSidebar(false);
   };
 
@@ -390,8 +395,8 @@ export function Workspace() {
       if (e.key === "Escape") {
         setSearch(false);
         setHelpOpen(false);
-        setSelection([]);
-      } else if ((e.key === "Delete" || e.key === "Backspace") && selection.length) {
+        selectOnly([]);
+      } else if ((e.key === "Delete" || e.key === "Backspace") && hasDeletableSelection) {
         deleteSelected();
       } else if (e.key.toLowerCase() === "v") setTool("select");
       else if (e.key.toLowerCase() === "h") setTool("hand");
@@ -430,13 +435,13 @@ export function Workspace() {
         onConnect={onConnect}
         onInit={setFlow}
         onMove={(_, viewport) => setZoom(Math.round(viewport.zoom * 100))}
-        onSelectionChange={({ nodes: ns }) =>
-          setSelection((previous) => {
-            const next = ns.map((n) => n.id);
-            if (next.length) setPanelOpen(true);
-            return previous.length === next.length && previous.every((id, index) => id === next[index]) ? previous : next;
-          })
-        }
+        onSelectionChange={({ nodes: ns }) => {
+          const next = ns.map((n) => n.id);
+          const prev = lastSelectionRef.current;
+          const changed = next.length !== prev.length || next.some((id, i) => id !== prev[i]);
+          lastSelectionRef.current = next;
+          if (changed && next.length) setPanelOpen(true);
+        }}
         fitView
         fitViewOptions={{ padding: 0.3 }}
         selectionOnDrag={effectiveTool === "select"}

@@ -1,18 +1,14 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import type { Node, NodeProps } from "@xyflow/react";
 import { ArrowRight, RotateCcw } from "lucide-react";
 import type { FlowNodeData } from "@/lib/types";
-import { NodeShell } from "./shared";
+import { NodeShell, useAutoFocus } from "./shared";
 
 type Props = NodeProps<Node<FlowNodeData & { autoFocus?: boolean }>>;
 
 export function QuestionNode({ id, data, selected }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
-    if (data.autoFocus) ref.current?.focus();
-    // only ever run for the initial mount of a freshly created node
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useAutoFocus(ref, data.autoFocus);
 
   const loading = data.status === "loading";
 
