@@ -39,6 +39,13 @@ kbd { font-size: 10px; background: #f4f1f6; border-radius: 5px; padding: 3px 5px
 .sidebar button:hover, .side-active { background: #f3f0fd !important; color: #5e42d4; }
 .side-spacer { flex: 1; }
 .sidebar .new-workspace { background: #7355e9; color: white; justify-content: center; }
+.workspace-list { max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; }
+.workspace-row { display: flex; align-items: center; border-radius: 8px; }
+.workspace-row.side-active { background: #f3f0fd; color: #5e42d4; }
+.workspace-row-main { flex: 1; min-width: 0; padding: 9px 8px !important; display: flex !important; align-items: center; gap: 9px; background: none !important; }
+.workspace-row-main span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-row-delete { padding: 6px !important; color: #a89fc0; flex-shrink: 0; }
+.workspace-row-delete:hover { color: #b23b3b; background: #fdf2f2 !important; }
 
 /* AI panel */
 .ai-panel { top: 70px; right: 16px; bottom: 82px; width: 380px; overflow: auto; padding: 17px; animation: panel-in .18s ease-out; }

@@ -13,9 +13,9 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { CircleHelp, Clipboard, Network, PanelLeft, Plus, Sparkles, ZoomIn, ZoomOut } from "lucide-react";
+import { CircleHelp, Clipboard, Network, PanelLeft, Plus, Sparkles, Trash2, ZoomIn, ZoomOut } from "lucide-react";
 
-import { loadWorkspace, newId, saveWorkspace } from "@/lib/workspace";
+import { createWorkspace, deleteWorkspace, listWorkspaces, loadWorkspace, newId, saveWorkspace, switchWorkspace, type WorkspaceSummary } from "@/lib/workspace";
 import { buildLineageContext } from "@/lib/context";
 import { layoutChildrenBelow, layoutChildOf, layoutBelowGroup, viewportCenterPosition } from "@/lib/layout";
 import { callAI } from "@/lib/ai-client";
@@ -60,8 +60,9 @@ function summarize(text: string, max = 70) {
 
 export function Workspace() {
   const [loaded] = useState(() => (typeof window !== "undefined" ? loadWorkspace() : null));
-  const [workspaceId] = useState(() => loaded?.id || newId("workspace"));
+  const [workspaceId, setWorkspaceId] = useState(() => loaded?.id || newId("workspace"));
   const [workspaceName, setWorkspaceName] = useState(loaded?.name || "Untitled workspace");
+  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>(() => (typeof window !== "undefined" ? listWorkspaces() : []));
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(loaded?.nodes || []);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(loaded?.edges || []);
 
@@ -96,7 +97,10 @@ export function Workspace() {
   }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => saveWorkspace({ version: 2, id: workspaceId, name: workspaceName, nodes, edges, updatedAt: new Date().toISOString() }), 500);
+    const timer = setTimeout(() => {
+      saveWorkspace({ version: 2, id: workspaceId, name: workspaceName, nodes, edges, updatedAt: new Date().toISOString() });
+      setWorkspaces(listWorkspaces());
+    }, 500);
     return () => clearTimeout(timer);
   }, [nodes, edges, workspaceId, workspaceName]);
 
@@ -452,11 +456,38 @@ export function Workspace() {
     setEdges((es) => es.filter((e) => !e.selected && !selection.includes(e.source) && !selection.includes(e.target)));
   }, [selection, setNodes, setEdges]);
 
-  const createBlankWorkspace = () => {
-    if (nodes.length > 0 && !window.confirm("Start a new workspace? This clears the current canvas.")) return;
-    setNodes([]);
-    setEdges([]);
+  const loadWorkspaceIntoState = (w: { id: string; name: string; nodes: FlowNode[]; edges: Edge[] }) => {
+    setWorkspaceId(w.id);
+    setWorkspaceName(w.name);
+    setNodes(w.nodes);
+    setEdges(w.edges);
+    selectOnly([]);
+    setPanelOpen(false);
+  };
+
+  const handleCreateWorkspace = () => {
+    const w = createWorkspace();
+    setWorkspaces(listWorkspaces());
+    loadWorkspaceIntoState(w);
     setSidebar(false);
+  };
+
+  const handleSwitchWorkspace = (id: string) => {
+    if (id === workspaceId) {
+      setSidebar(false);
+      return;
+    }
+    const w = switchWorkspace(id);
+    if (w) loadWorkspaceIntoState(w);
+    setSidebar(false);
+  };
+
+  const handleDeleteWorkspace = (id: string, name: string) => {
+    if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    const wasActive = id === workspaceId;
+    const next = deleteWorkspace(id);
+    setWorkspaces(listWorkspaces());
+    if (wasActive) loadWorkspaceIntoState(next);
   };
 
   const shareWorkspace = async () => {
@@ -577,9 +608,20 @@ export function Workspace() {
       {sidebar && (
         <aside className="sidebar floating">
           <div className="side-title">Your research</div>
-          <button className="side-active">
-            <Network size={16} /> {workspaceName}
-          </button>
+          <div className="workspace-list">
+            {workspaces.map((w) => (
+              <div key={w.id} className={`workspace-row ${w.id === workspaceId ? "side-active" : ""}`}>
+                <button className="workspace-row-main" onClick={() => handleSwitchWorkspace(w.id)}>
+                  <Network size={16} /> <span>{w.name}</span>
+                </button>
+                {workspaces.length > 1 && (
+                  <button className="workspace-row-delete" aria-label={`Delete ${w.name}`} title="Delete workspace" onClick={() => handleDeleteWorkspace(w.id, w.name)}>
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
           <button onClick={() => { setSidebar(false); setSearch(true); }}>
             <Clipboard size={16} /> Find a node
           </button>
@@ -590,7 +632,7 @@ export function Workspace() {
             <CircleHelp size={16} /> Shortcuts &amp; help
           </button>
           <div className="side-spacer" />
-          <button className="new-workspace" onClick={createBlankWorkspace}>
+          <button className="new-workspace" onClick={handleCreateWorkspace}>
             <Plus size={16} /> New workspace
           </button>
         </aside>
