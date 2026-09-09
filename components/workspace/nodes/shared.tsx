@@ -1,16 +1,17 @@
 import { useEffect, type ReactNode, type RefObject } from "react";
 import { Handle, Position } from "@xyflow/react";
-import { FileText, GitBranch, Lightbulb, Sparkles, Telescope, Type as TypeIcon } from "lucide-react";
+import { FileText, GitBranch, Lightbulb, Sparkles, Swords, Telescope, Type as TypeIcon } from "lucide-react";
 import type { NodeKind, NodeStatus } from "@/lib/types";
 
 export const KIND_LABEL: Record<NodeKind, string> = {
   question: "Question",
-  branch: "Research branch",
+  branch: "Follow-up",
   research: "Research",
   finding: "Finding",
   insight: "Insight",
   note: "Note",
   text: "Text",
+  debate: "Debate",
 };
 
 export const KIND_ICON: Record<NodeKind, typeof Sparkles> = {
@@ -21,6 +22,7 @@ export const KIND_ICON: Record<NodeKind, typeof Sparkles> = {
   insight: Lightbulb,
   note: FileText,
   text: TypeIcon,
+  debate: Swords,
 };
 
 /**

@@ -1,10 +1,11 @@
 import type { Edge, Node } from "@xyflow/react";
 
-export type NodeKind = "question" | "branch" | "research" | "finding" | "insight" | "note" | "text";
+export type NodeKind = "question" | "branch" | "research" | "finding" | "insight" | "note" | "text" | "debate";
 export type NodeStatus = "idle" | "loading" | "error";
 export type Confidence = "high" | "medium" | "low";
+export type DebateStance = "for" | "against" | "balanced" | "challenge" | "respond";
 
-export type ChatMessage = { id: string; role: "user" | "assistant"; content: string };
+export type ChatMessage = { id: string; role: "user" | "assistant"; content: string; stance?: DebateStance };
 
 export type ResearchSource = { id: string; title: string; url: string; domain: string; snippet: string; publishedAt?: string };
 
@@ -18,6 +19,17 @@ export type ChallengeResult = {
   suggestedQuestion: string;
 };
 
+export type DebateSummary = {
+  currentPosition: string;
+  strengthenedBy: string[];
+  weakenedBy: string[];
+  strongestCounterargument: string;
+  keyEvidence: string[];
+  assumptions: string[];
+  unresolvedQuestions: string[];
+  confidence: Confidence;
+};
+
 export type NodeAction =
   | "explore"
   | "retryExplore"
@@ -25,6 +37,7 @@ export type NodeAction =
   | "openResearch"
   | "challenge"
   | "createQuestionFromChallenge"
+  | "openDebate"
   | "editContent"
   | "editTitle";
 
@@ -44,6 +57,7 @@ export type FlowNodeData = {
   provenance?: Provenance;
   sources?: ResearchSource[];
   challenge?: ChallengeResult;
+  debateSummary?: DebateSummary;
   onAction?: (action: NodeAction, id: string, payload?: unknown) => void;
 };
 

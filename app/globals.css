@@ -63,6 +63,13 @@ kbd { font-size: 10px; background: #f4f1f6; border-radius: 5px; padding: 3px 5px
 .chat-message { border-radius: 10px; padding: 9px 10px; font-size: 12.5px; line-height: 1.55; }
 .chat-message.user { background: #f5f2fa; align-self: flex-end; max-width: 90%; }
 .chat-message.assistant { background: #fbfaff; border: 1px solid #eee9f7; }
+.chat-message.assistant.stance-for { background: #eef8f1; border-color: #cdeada; }
+.chat-message.assistant.stance-for .chat-role { color: #198656; }
+.chat-message.assistant.stance-against { background: #fdf2f2; border-color: #f3d9d9; }
+.chat-message.assistant.stance-against .chat-role { color: #b23b3b; }
+.chat-message.assistant.stance-balanced { background: #f6f4fb; border-color: #e3ddf4; }
+.chat-message.assistant.stance-challenge { background: #fdf7ec; border-color: #f3e3c2; }
+.chat-message.assistant.stance-challenge .chat-role { color: #a3721b; }
 .chat-message p { color: #3c3743; margin: 4px 0 6px; white-space: pre-wrap; }
 .chat-role { font-size: 10px; font-weight: 600; letter-spacing: .06em; color: #a099ac; text-transform: uppercase; }
 .thinking { display: flex; gap: 8px; align-items: center; color: #726b7b; }
@@ -94,6 +101,7 @@ kbd { font-size: 10px; background: #f4f1f6; border-radius: 5px; padding: 3px 5px
 .canvas-node.insight { width: 300px; border-color: #f0d9a8; background: #fffdf7; }
 .canvas-node.branch { border-color: #cdd7f4; }
 .canvas-node.finding { border-color: #c7e6d3; }
+.canvas-node.debate { border-color: #f0c2c2; }
 .node-kicker { display: flex; align-items: center; gap: 6px; text-transform: uppercase; font-size: 10px; font-weight: 600; letter-spacing: .08em; color: #776b8b; }
 .node-kicker svg { color: #7355e9; }
 .node-kicker-trailer { position: absolute; top: 14px; right: 14px; }

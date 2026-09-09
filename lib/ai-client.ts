@@ -1,4 +1,4 @@
-import type { ChatMessage, Confidence } from "./types";
+import type { ChatMessage, Confidence, DebateStance, DebateSummary } from "./types";
 
 type Branch = { title: string; description: string };
 type SynthesisResult = { title: string; summary: string; keyPoints: string[]; supportingEvidence: string[]; confidence: Confidence };
@@ -8,7 +8,10 @@ type Request =
   | { action: "decompose"; question: string }
   | { action: "chat"; topic: string; context?: string; history?: ChatMessage[]; message: string }
   | { action: "synthesize"; context?: string; findings: { title: string; content: string }[] }
-  | { action: "challenge"; insightTitle: string; insightSummary: string; keyPoints: string[] };
+  | { action: "challenge"; insightTitle: string; insightSummary: string; keyPoints: string[] }
+  | { action: "debate"; topic: string; context?: string; history?: ChatMessage[]; message: string; stance: DebateStance }
+  | { action: "debateCruxes"; topic: string; context?: string }
+  | { action: "debateSummarize"; topic: string; history: ChatMessage[] };
 
 type DataFor<A extends Request["action"]> = A extends "decompose"
   ? { answer: string; branches: Branch[] }
@@ -16,7 +19,13 @@ type DataFor<A extends Request["action"]> = A extends "decompose"
     ? { reply: string }
     : A extends "synthesize"
       ? SynthesisResult
-      : ChallengeResult;
+      : A extends "challenge"
+        ? ChallengeResult
+        : A extends "debate"
+          ? { reply: string }
+          : A extends "debateCruxes"
+            ? { cruxes: Branch[] }
+            : DebateSummary;
 
 export async function callAI<R extends Request>(body: R): Promise<DataFor<R["action"]>> {
   const response = await fetch("/api/ai", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });

@@ -8,6 +8,7 @@ export const NODE_SIZE: Record<NodeKind, { width: number; height: number }> = {
   insight: { width: 320, height: 220 },
   note: { width: 240, height: 150 },
   text: { width: 220, height: 90 },
+  debate: { width: 300, height: 190 },
 };
 
 const GAP_X = 48;

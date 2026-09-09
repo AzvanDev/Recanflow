@@ -19,7 +19,7 @@ import { loadWorkspace, newId, saveWorkspace } from "@/lib/workspace";
 import { buildLineageContext } from "@/lib/context";
 import { layoutChildrenBelow, layoutChildOf, layoutBelowGroup, viewportCenterPosition } from "@/lib/layout";
 import { callAI } from "@/lib/ai-client";
-import type { ChatMessage, Confidence, FlowNode, FlowNodeData, NodeAction, NodeKind } from "@/lib/types";
+import type { ChatMessage, Confidence, DebateStance, FlowNode, FlowNodeData, NodeAction, NodeKind } from "@/lib/types";
 import { useHistory } from "@/lib/history";
 
 import { QuestionNode } from "./nodes/QuestionNode";
@@ -29,6 +29,7 @@ import { FindingNode } from "./nodes/FindingNode";
 import { InsightNode } from "./nodes/InsightNode";
 import { NoteNode } from "./nodes/NoteNode";
 import { TextNode } from "./nodes/TextNode";
+import { DebateNode } from "./nodes/DebateNode";
 import { TopLeftHeader, TopRightControls, ShareToast } from "./Header";
 import { Toolbar, type Tool } from "./Toolbar";
 import { EmptyState } from "./EmptyState";
@@ -36,7 +37,7 @@ import { AIResearchPanel, type PanelActions } from "./AIResearchPanel";
 import { CommandPalette } from "./CommandPalette";
 import { OnboardingModal, HelpModal } from "./Modals";
 
-const nodeTypes = { question: QuestionNode, branch: BranchNode, research: ResearchNode, finding: FindingNode, insight: InsightNode, note: NoteNode, text: TextNode };
+const nodeTypes = { question: QuestionNode, branch: BranchNode, research: ResearchNode, finding: FindingNode, insight: InsightNode, note: NoteNode, text: TextNode, debate: DebateNode };
 
 function findAncestorOfKind(id: string, kind: NodeKind, nodes: FlowNode[], edges: Edge[]): FlowNode | undefined {
   const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -305,16 +306,106 @@ export function Workspace() {
     }
   }, [patchNode]);
 
-  const createQuestionFromChallenge = useCallback((insightId: string) => {
-    const insight = nodesRef.current.find((n) => n.id === insightId);
-    if (!insight?.data.challenge) return;
+  // Creates a new connected Question node from any parent — reused for "create question from
+  // challenge" and for turning a debate's unresolved question into real research.
+  const createConnectedQuestion = useCallback((parentId: string, title: string) => {
+    const parent = nodesRef.current.find((n) => n.id === parentId);
+    if (!parent) return;
     const id = newId("question");
-    const pos = layoutChildOf(nodesRef.current, insight, "question");
-    pushNodes([{ id, type: "question", position: pos, data: { kind: "question", title: insight.data.challenge.suggestedQuestion, status: "idle" } }], [{ id: `e-${insightId}-${id}`, source: insightId, target: id, type: "smoothstep" }]);
+    const pos = layoutChildOf(nodesRef.current, parent, "question");
+    pushNodes([{ id, type: "question", position: pos, data: { kind: "question", title, status: "idle" } }], [{ id: `e-${parentId}-${id}`, source: parentId, target: id, type: "smoothstep" }]);
     selectOnly([id]);
     setFocusNodeId(id);
     window.setTimeout(() => flow?.fitView({ padding: 0.25, duration: 350 }), 60);
   }, [pushNodes, flow, selectOnly]);
+
+  const createQuestionFromChallenge = useCallback((insightId: string) => {
+    const insight = nodesRef.current.find((n) => n.id === insightId);
+    if (!insight?.data.challenge) return;
+    createConnectedQuestion(insightId, insight.data.challenge.suggestedQuestion);
+  }, [createConnectedQuestion]);
+
+  // -- debate --
+  const startDebate = useCallback((sourceId: string) => {
+    const source = nodesRef.current.find((n) => n.id === sourceId);
+    if (!source) return;
+    const existingEdge = edgesRef.current.find((e) => e.source === sourceId && nodesRef.current.find((n) => n.id === e.target)?.data.kind === "debate");
+    if (existingEdge) {
+      selectOnly([existingEdge.target]);
+      return;
+    }
+    const grounding = source.data.kind === "insight" ? source.data.description : source.data.kind === "finding" ? source.data.content : source.data.description;
+    const id = newId("debate");
+    const pos = layoutChildOf(nodesRef.current, source, "debate");
+    pushNodes(
+      [{ id, type: "debate", position: pos, data: { kind: "debate", title: source.data.title, description: grounding || "", messages: [], status: "idle" } }],
+      [{ id: `e-${sourceId}-${id}`, source: sourceId, target: id, type: "smoothstep" }],
+    );
+    selectOnly([id]);
+  }, [pushNodes, selectOnly]);
+
+  const sendDebateTurn = useCallback(async (debateId: string, stance: DebateStance, apiMessage: string, visibleUserMessage?: string) => {
+    const debate = nodesRef.current.find((n) => n.id === debateId);
+    if (!debate) return;
+    const history: ChatMessage[] = debate.data.messages || [];
+    const context = `${buildLineageContext(debateId, nodesRef.current, edgesRef.current)}${debate.data.description ? `\n\n${debate.data.description}` : ""}`;
+    const userMsg: ChatMessage | null = visibleUserMessage ? { id: newId("msg"), role: "user", content: visibleUserMessage } : null;
+    patchNode(debateId, (d) => ({ status: "loading", error: undefined, messages: userMsg ? [...(d.messages || []), userMsg] : d.messages || [] }));
+    try {
+      const { reply } = await callAI({ action: "debate", topic: debate.data.title, context, history, message: apiMessage, stance });
+      patchNode(debateId, (d) => ({ status: "idle", messages: [...(d.messages || []), { id: newId("msg"), role: "assistant", content: reply, stance }] }));
+    } catch (err) {
+      patchNode(debateId, { status: "error", error: err instanceof Error ? err.message : "The debate assistant is unavailable." });
+    }
+  }, [patchNode]);
+
+  const argueDebate = useCallback((debateId: string, stance: "for" | "against" | "balanced") => {
+    const prompt =
+      stance === "for" ? "Argue in favor of this position." : stance === "against" ? "Argue against this position." : "Give a balanced take, weighing both sides honestly.";
+    sendDebateTurn(debateId, stance, prompt);
+  }, [sendDebateTurn]);
+
+  const respondDebate = useCallback((debateId: string, text: string) => {
+    const debate = nodesRef.current.find((n) => n.id === debateId);
+    const hasUserSpoken = (debate?.data.messages || []).some((m) => m.role === "user");
+    sendDebateTurn(debateId, hasUserSpoken ? "respond" : "challenge", text, text);
+  }, [sendDebateTurn]);
+
+  const getCruxes = useCallback(async (debateId: string) => {
+    const debate = nodesRef.current.find((n) => n.id === debateId);
+    if (!debate) return;
+    patchNode(debateId, { status: "loading", error: undefined });
+    try {
+      const context = `${buildLineageContext(debateId, nodesRef.current, edgesRef.current)}${debate.data.description ? `\n\n${debate.data.description}` : ""}`;
+      const { cruxes } = await callAI({ action: "debateCruxes", topic: debate.data.title, context });
+      const parent = nodesRef.current.find((n) => n.id === debateId)!;
+      const positions = layoutChildrenBelow(nodesRef.current, parent, "branch", cruxes.length);
+      const ids = cruxes.map(() => newId("branch"));
+      const newNodes: FlowNode[] = cruxes.map((c, i) => ({ id: ids[i], type: "branch", position: positions[i], data: { kind: "branch", title: c.title, description: c.description } }));
+      const newEdges: Edge[] = ids.map((bid) => ({ id: `e-${debateId}-${bid}`, source: debateId, target: bid, type: "smoothstep" }));
+      pushNodes(newNodes, newEdges);
+      patchNode(debateId, { status: "idle" });
+      window.setTimeout(() => flow?.fitView({ padding: 0.25, duration: 350 }), 60);
+    } catch (err) {
+      patchNode(debateId, { status: "error", error: err instanceof Error ? err.message : "Could not find what would change your mind." });
+    }
+  }, [patchNode, pushNodes, flow]);
+
+  const summarizeDebate = useCallback(async (debateId: string) => {
+    const debate = nodesRef.current.find((n) => n.id === debateId);
+    if (!debate || !(debate.data.messages || []).length) return;
+    patchNode(debateId, { status: "loading", error: undefined });
+    try {
+      const summary = await callAI({ action: "debateSummarize", topic: debate.data.title, history: debate.data.messages || [] });
+      patchNode(debateId, { status: "idle", debateSummary: summary });
+    } catch (err) {
+      patchNode(debateId, { status: "error", error: err instanceof Error ? err.message : "Could not summarize this debate." });
+    }
+  }, [patchNode]);
+
+  const exploreUnresolved = useCallback((debateId: string, question: string) => {
+    createConnectedQuestion(debateId, question);
+  }, [createConnectedQuestion]);
 
   const selectNode = useCallback((id: string) => {
     selectOnly([id]);
@@ -328,7 +419,8 @@ export function Workspace() {
     else if (action === "openResearch" || action === "openBranch") openResearch(id);
     else if (action === "challenge") challenge(id);
     else if (action === "createQuestionFromChallenge") createQuestionFromChallenge(id);
-  }, [patchNode, explore, openResearch, challenge, createQuestionFromChallenge]);
+    else if (action === "openDebate") selectOnly([id]);
+  }, [patchNode, explore, openResearch, challenge, createQuestionFromChallenge, selectOnly]);
 
   const panelActions: PanelActions = useMemo(() => ({
     explore,
@@ -339,9 +431,15 @@ export function Workspace() {
     challenge,
     createQuestionFromChallenge,
     addFollowUp,
+    startDebate,
+    argueDebate,
+    respondDebate,
+    getCruxes,
+    summarizeDebate,
+    exploreUnresolved,
     selectNode,
     startQuestion: () => addQuestion(),
-  }), [explore, openResearch, sendChat, saveFinding, synthesize, challenge, createQuestionFromChallenge, addFollowUp, selectNode, addQuestion]);
+  }), [explore, openResearch, sendChat, saveFinding, synthesize, challenge, createQuestionFromChallenge, addFollowUp, startDebate, argueDebate, respondDebate, getCruxes, summarizeDebate, exploreUnresolved, selectNode, addQuestion]);
 
   const onConnect = useCallback((connection: Connection) => {
     setEdges((es) => addEdge({ ...connection, type: "smoothstep" }, es));

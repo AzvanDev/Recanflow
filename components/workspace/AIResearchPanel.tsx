@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Edge } from "@xyflow/react";
-import { ArrowRight, Bookmark, ChevronRight, Plus, RotateCcw, Send, ShieldQuestion, Sparkles, Telescope, X } from "lucide-react";
-import type { FlowNode } from "@/lib/types";
+import { ArrowRight, Bookmark, ChevronRight, HelpCircle, ListChecks, Plus, RotateCcw, Scale, Send, ShieldQuestion, Sparkles, Swords, Telescope, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import type { DebateStance, FlowNode } from "@/lib/types";
 import { KIND_LABEL } from "./nodes/shared";
 
 export type PanelActions = {
@@ -13,9 +13,23 @@ export type PanelActions = {
   challenge: (insightId: string) => void;
   createQuestionFromChallenge: (insightId: string) => void;
   addFollowUp: (parentId: string, title: string) => void;
+  startDebate: (sourceId: string) => void;
+  argueDebate: (debateId: string, stance: "for" | "against" | "balanced") => void;
+  respondDebate: (debateId: string, text: string) => void;
+  getCruxes: (debateId: string) => void;
+  summarizeDebate: (debateId: string) => void;
+  exploreUnresolved: (debateId: string, question: string) => void;
   selectNode: (id: string) => void;
   startQuestion: () => void;
 };
+
+function DebateThisButton({ id, actions }: { id: string; actions: PanelActions }) {
+  return (
+    <button className="node-action" onClick={() => actions.startDebate(id)}>
+      <Swords size={13} /> Debate this
+    </button>
+  );
+}
 
 export function AIResearchPanel({
   selected,
@@ -145,6 +159,7 @@ function SingleNodeView({ node, nodes, edges, actions }: { node: FlowNode; nodes
         <button className="primary wide" onClick={() => actions.openResearch(node.id)}>
           <Telescope size={16} /> Open research <ChevronRight size={15} />
         </button>
+        <div className="panel-quick-actions"><DebateThisButton id={node.id} actions={actions} /></div>
       </>
     );
   }
@@ -155,16 +170,21 @@ function SingleNodeView({ node, nodes, edges, actions }: { node: FlowNode; nodes
     return (
       <>
         <p className="panel-finding-content">{data.content}</p>
-        {data.provenance?.researchId && (
-          <button className="node-action" onClick={() => actions.selectNode(data.provenance!.researchId!)}>
-            <Telescope size={13} /> Open source research
-          </button>
-        )}
+        <div className="panel-quick-actions">
+          {data.provenance?.researchId && (
+            <button className="node-action" onClick={() => actions.selectNode(data.provenance!.researchId!)}>
+              <Telescope size={13} /> Open source research
+            </button>
+          )}
+          <DebateThisButton id={node.id} actions={actions} />
+        </div>
       </>
     );
   }
 
   if (data.kind === "insight") return <InsightView node={node} actions={actions} />;
+
+  if (data.kind === "debate") return <DebateView node={node} actions={actions} />;
 
   return <p>{data.content || "Edit this note directly on the canvas."}</p>;
 }
@@ -297,6 +317,7 @@ function InsightView({ node, actions }: { node: FlowNode; actions: PanelActions 
           {data.status === "loading" ? "Challenging insight…" : (<><ShieldQuestion size={16} /> Challenge</>)}
         </button>
       )}
+      <div className="panel-quick-actions"><DebateThisButton id={node.id} actions={actions} /></div>
       {data.challenge && (
         <div className="challenge-block">
           <span className="eyebrow">CHALLENGE</span>
@@ -315,5 +336,149 @@ function InsightView({ node, actions }: { node: FlowNode; actions: PanelActions 
         </div>
       )}
     </>
+  );
+}
+
+function stanceLabel(role: "user" | "assistant", stance?: DebateStance) {
+  if (role === "user") return "You";
+  if (stance === "for") return "For";
+  if (stance === "against") return "Against";
+  if (stance === "balanced") return "Balanced";
+  if (stance === "challenge") return "Challenges you";
+  return "AI";
+}
+
+function DebateView({ node, actions }: { node: FlowNode; actions: PanelActions }) {
+  const [draft, setDraft] = useState("");
+  // Tracks whichever debate action last ran, so the error banner's Retry re-attempts the
+  // thing that actually failed (arguing a stance, sending a reply, cruxes, or summarize).
+  const [lastAction, setLastAction] = useState<(() => void) | null>(null);
+  const { data } = node;
+  const messages = data.messages || [];
+  const busy = data.status === "loading";
+  const hasExchanges = messages.length > 0;
+
+  function send() {
+    if (!draft.trim() || busy) return;
+    const text = draft.trim();
+    setLastAction(() => () => actions.respondDebate(node.id, text));
+    actions.respondDebate(node.id, text);
+    setDraft("");
+  }
+
+  function argue(stance: "for" | "against" | "balanced") {
+    setLastAction(() => () => actions.argueDebate(node.id, stance));
+    actions.argueDebate(node.id, stance);
+  }
+
+  function cruxes() {
+    setLastAction(() => () => actions.getCruxes(node.id));
+    actions.getCruxes(node.id);
+  }
+
+  function summarize() {
+    setLastAction(() => () => actions.summarizeDebate(node.id));
+    actions.summarizeDebate(node.id);
+  }
+
+  return (
+    <>
+      <p>{data.description || "State your view, or ask the AI to argue a side, to begin."}</p>
+      <div className="panel-quick-actions">
+        <button className="node-action" disabled={busy} onClick={() => argue("for")}>
+          <ThumbsUp size={13} /> Argue for
+        </button>
+        <button className="node-action" disabled={busy} onClick={() => argue("against")}>
+          <ThumbsDown size={13} /> Argue against
+        </button>
+        <button className="node-action" disabled={busy} onClick={() => argue("balanced")}>
+          <Scale size={13} /> Balanced
+        </button>
+      </div>
+      <div className="chat-thread">
+        {!hasExchanges && !busy && <p className="chat-empty">No exchanges yet.</p>}
+        {messages.map((m) => (
+          <div key={m.id} className={`chat-message ${m.role} stance-${m.stance || "none"}`}>
+            <span className="chat-role">{stanceLabel(m.role, m.stance)}</span>
+            <p>{m.content}</p>
+          </div>
+        ))}
+        {busy && <p className="thinking"><span /> Thinking…</p>}
+        {data.status === "error" && <ErrorBanner message={data.error} onRetry={() => lastAction?.()} />}
+      </div>
+      {hasExchanges && (
+        <div className="panel-quick-actions">
+          <button className="node-action" disabled={busy} onClick={cruxes}>
+            <HelpCircle size={13} /> What would change your mind?
+          </button>
+          <button className="node-action" disabled={busy} onClick={summarize}>
+            <ListChecks size={13} /> {data.debateSummary ? "Update summary" : "Summarize debate"}
+          </button>
+        </div>
+      )}
+      {data.debateSummary && <DebateSummaryCard debateId={node.id} summary={data.debateSummary} actions={actions} />}
+      <div className="composer">
+        <textarea
+          aria-label="State your position or respond"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") send();
+          }}
+          placeholder="State your position or respond…"
+        />
+        <button className="send" onClick={send} disabled={busy || !draft.trim()} aria-label="Send">
+          <Send size={16} />
+        </button>
+      </div>
+    </>
+  );
+}
+
+function DebateSummaryCard({ debateId, summary, actions }: { debateId: string; summary: NonNullable<FlowNode["data"]["debateSummary"]>; actions: PanelActions }) {
+  return (
+    <div className="challenge-block">
+      <span className="eyebrow">DEBATE SUMMARY</span>
+      {summary.currentPosition && <p className="challenge-lead">{summary.currentPosition}</p>}
+      <div className="node-meta"><span className={`confidence ${summary.confidence}`}>Confidence: {summary.confidence}</span></div>
+      {summary.strengthenedBy.length > 0 && (
+        <>
+          <span className="eyebrow">STRENGTHENED BY</span>
+          <ul className="panel-list">{summary.strengthenedBy.map((s, i) => <li key={i}>{s}</li>)}</ul>
+        </>
+      )}
+      {summary.weakenedBy.length > 0 && (
+        <>
+          <span className="eyebrow">WEAKENED BY</span>
+          <ul className="panel-list">{summary.weakenedBy.map((s, i) => <li key={i}>{s}</li>)}</ul>
+        </>
+      )}
+      {summary.strongestCounterargument && (
+        <>
+          <span className="eyebrow">STRONGEST COUNTERARGUMENT</span>
+          <p>{summary.strongestCounterargument}</p>
+        </>
+      )}
+      {summary.assumptions.length > 0 && (
+        <>
+          <span className="eyebrow">ASSUMPTIONS</span>
+          <ul className="panel-list">{summary.assumptions.map((s, i) => <li key={i}>{s}</li>)}</ul>
+        </>
+      )}
+      {summary.unresolvedQuestions.length > 0 && (
+        <>
+          <span className="eyebrow">OPEN QUESTIONS</span>
+          <div className="followup-list">
+            {summary.unresolvedQuestions.map((q, i) => (
+              <button key={i} className="followup-chip" onClick={() => actions.exploreUnresolved(debateId, q)}>
+                <span>{q}</span>
+                <ChevronRight size={14} />
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 }

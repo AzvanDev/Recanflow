@@ -29,7 +29,8 @@ function deepSanitize<T>(value: T): T {
   return value;
 }
 
-const chatMessageSchema = z.object({ role: z.enum(["user", "assistant"]), content: z.string() });
+const chatMessageSchema = z.object({ role: z.enum(["user", "assistant"]), content: z.string(), stance: z.enum(["for", "against", "balanced", "challenge", "respond"]).optional() });
+const debateStanceSchema = z.enum(["for", "against", "balanced", "challenge", "respond"]);
 
 const requestSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("decompose"), question: z.string().min(1).max(2000) }),
@@ -51,11 +52,29 @@ const requestSchema = z.discriminatedUnion("action", [
     insightSummary: z.string().min(1).max(4000),
     keyPoints: z.array(z.string()).default([]),
   }),
+  z.object({
+    action: z.literal("debate"),
+    topic: z.string().min(1).max(2000),
+    context: z.string().max(8000).optional().default(""),
+    history: z.array(chatMessageSchema).max(60).optional().default([]),
+    message: z.string().min(1).max(4000),
+    stance: debateStanceSchema,
+  }),
+  z.object({
+    action: z.literal("debateCruxes"),
+    topic: z.string().min(1).max(2000),
+    context: z.string().max(4000).optional().default(""),
+  }),
+  z.object({
+    action: z.literal("debateSummarize"),
+    topic: z.string().min(1).max(2000),
+    history: z.array(chatMessageSchema).min(1).max(60),
+  }),
 ]);
 
 const branchesSchema = z.object({
   answer: z.string().min(1).max(1500),
-  branches: z.array(z.object({ title: z.string().min(1).max(160), description: z.string().min(1).max(600) })).min(3).max(5),
+  branches: z.array(z.object({ title: z.string().min(1).max(240), description: z.string().min(1).max(600) })).min(3).max(5),
 });
 const synthesisSchema = z.object({
   title: z.string().min(1).max(200),
@@ -70,6 +89,19 @@ const challengeSchema = z.object({
   alternativeExplanation: z.string().min(1).max(1500),
   confidence: z.enum(["high", "medium", "low"]),
   suggestedQuestion: z.string().min(1).max(400),
+});
+const cruxesSchema = z.object({
+  cruxes: z.array(z.object({ title: z.string().min(1).max(240), description: z.string().min(1).max(600) })).min(3).max(5),
+});
+const debateSummarySchema = z.object({
+  currentPosition: z.string().max(600).default(""),
+  strengthenedBy: z.array(z.string()).max(6).default([]),
+  weakenedBy: z.array(z.string()).max(6).default([]),
+  strongestCounterargument: z.string().max(600).default(""),
+  keyEvidence: z.array(z.string()).max(6).default([]),
+  assumptions: z.array(z.string()).max(6).default([]),
+  unresolvedQuestions: z.array(z.string()).max(6).default([]),
+  confidence: z.enum(["high", "medium", "low"]),
 });
 
 type Body = z.infer<typeof requestSchema>;
@@ -107,9 +139,34 @@ function instructionFor(body: Body): { system: string; wantsJson: boolean } {
       system: `You are synthesizing multiple research findings into one precise insight. Respond with ONLY JSON: {"title":"short specific insight title, not a generic label","summary":"2-3 tight, concrete sentences stating the actual conclusion, no throat-clearing","keyPoints":["one precise, standalone-readable sentence per point, no vague filler"],"supportingEvidence":["a plain sentence naming which finding(s) support this and exactly how, e.g. 'Finding 2 shows X, which directly supports Y'"],"confidence":"high|medium|low"}. Base the synthesis strictly on the findings given — never invent evidence, and if the findings conflict or are thin, say so plainly in the summary and lower the confidence accordingly. ${NO_MARKDOWN}`,
     };
   }
+  if (body.action === "challenge") {
+    return {
+      wantsJson: true,
+      system: `You are a rigorous critical reviewer stress-testing a research insight. Find the strongest real objections, not generic hedging: contradictory evidence, weak or unstated assumptions, missing evidence, plausible alternative explanations, and overgeneralization. Respond with ONLY JSON: {"weaknesses":["one specific, concrete weakness per item — name the actual flaw, not a category"],"missingEvidence":"one precise sentence naming exactly what evidence is absent and why it matters","alternativeExplanation":"one concrete alternative reading of the same evidence","confidence":"high|medium|low (your honest revised confidence in the original insight after this challenge)","suggestedQuestion":"one specific, answerable follow-up research question that would resolve the single biggest gap"}. ${NO_MARKDOWN}`,
+    };
+  }
+  if (body.action === "debate") {
+    const stanceInstruction: Record<typeof body.stance, string> = {
+      for: "Argue FOR this position as rigorously and persuasively as you honestly can, using real reasoning — not fabricated statistics or invented sources.",
+      against: "Argue AGAINST this position as rigorously and persuasively as you honestly can, using real reasoning — not fabricated statistics or invented sources.",
+      balanced: "Give a balanced take: state the strongest case on each side and honestly weigh them against each other — do not dodge toward a wishy-washy middle just to seem fair.",
+      challenge: "The user has stated their own position. Challenge it as rigorously as a sharp, good-faith critic would: find the weakest link in their reasoning, name unstated assumptions, and offer the strongest real counter-evidence or counter-example. Do not simply agree or soften your critique to be polite.",
+      respond: "Continue this debate as an intellectually honest sparring partner responding to what the user just said. Acknowledge anything genuinely correct in their point in one clause at most, then push back with the strongest real counter-consideration — do not cave to agreement just because they pushed back, and do not repeat points already made earlier in the thread.",
+    };
+    return {
+      wantsJson: false,
+      system: `You are debating one specific position with the user, reasoning from general knowledge only (no live search, no fabricated citations or statistics). ${stanceInstruction[body.stance]} Keep it tight — under 150 words, lead with your strongest point first, no throat-clearing or restating the topic. ${NO_MARKDOWN}`,
+    };
+  }
+  if (body.action === "debateCruxes") {
+    return {
+      wantsJson: true,
+      system: `You help turn a debated position into concrete research questions. Given the position below, identify 3 to 5 specific "cruxes" — the concrete pieces of evidence or facts that, if known, would most change confidence in this position one way or the other (per Julia Galef's "what would change your mind" framing). Each crux must be a specific, investigable question, not a vague theme. Respond with ONLY JSON: {"cruxes":[{"title":"a specific investigable question","description":"one sentence on why this evidence would be decisive"}]}. No prose outside the JSON. ${NO_MARKDOWN}`,
+    };
+  }
   return {
     wantsJson: true,
-    system: `You are a rigorous critical reviewer stress-testing a research insight. Find the strongest real objections, not generic hedging: contradictory evidence, weak or unstated assumptions, missing evidence, plausible alternative explanations, and overgeneralization. Respond with ONLY JSON: {"weaknesses":["one specific, concrete weakness per item — name the actual flaw, not a category"],"missingEvidence":"one precise sentence naming exactly what evidence is absent and why it matters","alternativeExplanation":"one concrete alternative reading of the same evidence","confidence":"high|medium|low (your honest revised confidence in the original insight after this challenge)","suggestedQuestion":"one specific, answerable follow-up research question that would resolve the single biggest gap"}. ${NO_MARKDOWN}`,
+    system: `You are summarizing a debate transcript into a clear-eyed wrap-up. Respond with ONLY JSON: {"currentPosition":"one or two sentences stating where the position now stands after the debate","strengthenedBy":["a specific point that strengthened the position, if any"],"weakenedBy":["a specific point that weakened the position, if any"],"strongestCounterargument":"the single strongest counterargument raised in the debate","keyEvidence":["a specific piece of evidence or reasoning actually used in the debate"],"assumptions":["an assumption either side relied on"],"unresolvedQuestions":["a specific question the debate did not resolve"],"confidence":"high|medium|low, your honest confidence in the current position given everything said"}. Base this strictly on the actual transcript — never invent points that were not made. ${NO_MARKDOWN}`,
   };
 }
 
@@ -123,7 +180,14 @@ function userContentFor(body: Body): string {
     const findings = body.findings.map((f, i) => `Finding ${i + 1} — ${f.title}: ${f.content}`).join("\n\n");
     return `Context: ${body.context}\n\nFindings to synthesize:\n${findings}`;
   }
-  return `Insight: ${body.insightTitle}\nSummary: ${body.insightSummary}\nKey points: ${body.keyPoints.join("; ")}`;
+  if (body.action === "challenge") return `Insight: ${body.insightTitle}\nSummary: ${body.insightSummary}\nKey points: ${body.keyPoints.join("; ")}`;
+  if (body.action === "debate") {
+    const history = body.history.map((m) => `${m.role === "user" ? "User" : "AI"}: ${m.content}`).join("\n");
+    return `Position being debated: ${body.topic}\n\nBackground:\n${body.context}\n\n${history ? `Debate so far:\n${history}\n\n` : ""}User: ${body.message}`;
+  }
+  if (body.action === "debateCruxes") return `Position: ${body.topic}\n\nBackground:\n${body.context}`;
+  const transcript = body.history.map((m) => `${m.role === "user" ? "User" : `AI (${m.stance || "debate"})`}: ${m.content}`).join("\n");
+  return `Position debated: ${body.topic}\n\nTranscript:\n${transcript}`;
 }
 
 function localFallback(body: Body) {
@@ -150,12 +214,36 @@ function localFallback(body: Body) {
       confidence: "low" as const,
     };
   }
+  if (body.action === "challenge") {
+    return {
+      weaknesses: ["No AI provider is configured, so this challenge could not be generated."],
+      missingEvidence: "Add GEMINI_API_KEY or GROQ_API_KEY in .env.local to enable real critical review.",
+      alternativeExplanation: "Not available without a configured AI provider.",
+      confidence: "low" as const,
+      suggestedQuestion: `What additional evidence would most change confidence in: ${body.insightTitle}?`,
+    };
+  }
+  if (body.action === "debate") {
+    return { reply: "No AI provider is configured, so this is a local placeholder. Add GEMINI_API_KEY or GROQ_API_KEY in .env.local to get a real debate response." };
+  }
+  if (body.action === "debateCruxes") {
+    return {
+      cruxes: [
+        { title: `What is the strongest evidence for: ${body.topic}?`, description: "No AI provider is configured, so this is a placeholder crux." },
+        { title: `What is the strongest evidence against: ${body.topic}?`, description: "No AI provider is configured, so this is a placeholder crux." },
+        { title: "What would a neutral observer need to see to be convinced either way?", description: "No AI provider is configured, so this is a placeholder crux." },
+      ],
+    };
+  }
   return {
-    weaknesses: ["No AI provider is configured, so this challenge could not be generated."],
-    missingEvidence: "Add GEMINI_API_KEY or GROQ_API_KEY in .env.local to enable real critical review.",
-    alternativeExplanation: "Not available without a configured AI provider.",
+    currentPosition: "No AI provider is configured, so no real summary is available.",
+    strengthenedBy: [],
+    weakenedBy: [],
+    strongestCounterargument: "Add GEMINI_API_KEY or GROQ_API_KEY in .env.local to summarize this debate.",
+    keyEvidence: [],
+    assumptions: [],
+    unresolvedQuestions: ["Add GEMINI_API_KEY or GROQ_API_KEY in .env.local to enable a real debate summary."],
     confidence: "low" as const,
-    suggestedQuestion: `What additional evidence would most change confidence in: ${body.insightTitle}?`,
   };
 }
 
@@ -163,6 +251,8 @@ function parseStructured(body: Body, text: string) {
   const json = extractJson(text);
   if (body.action === "decompose") return branchesSchema.parse(json);
   if (body.action === "synthesize") return synthesisSchema.parse(json);
+  if (body.action === "debateCruxes") return cruxesSchema.parse(json);
+  if (body.action === "debateSummarize") return debateSummarySchema.parse(json);
   return challengeSchema.parse(json);
 }
 
