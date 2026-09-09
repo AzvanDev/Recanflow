@@ -54,6 +54,7 @@ const requestSchema = z.discriminatedUnion("action", [
 ]);
 
 const branchesSchema = z.object({
+  answer: z.string().min(1).max(1500),
   branches: z.array(z.object({ title: z.string().min(1).max(160), description: z.string().min(1).max(600) })).min(3).max(5),
 });
 const synthesisSchema = z.object({
@@ -91,7 +92,7 @@ function instructionFor(body: Body): { system: string; wantsJson: boolean } {
   if (body.action === "decompose") {
     return {
       wantsJson: true,
-      system: `You are a research planning assistant. Break the user's question into 3 to 5 distinct, non-overlapping research branches that together cover the question from its most important angles — pick whichever angles actually matter for THIS question (e.g. economic, technical, social, regulatory, risk) rather than a generic fixed template. Each branch title should be a specific, concrete noun phrase (not a vague category like "Considerations"), and its description one precise sentence naming exactly what to investigate. Respond with ONLY JSON: {"branches":[{"title":"specific branch name","description":"one precise sentence describing exactly what to investigate"}]}. No prose outside the JSON. ${NO_MARKDOWN}`,
+      system: `You are a thinking partner helping someone understand a question, reasoning from general knowledge only (you have no live search). First write a direct, concrete answer to their question in 2 to 4 sentences — lead with the actual answer, not a preamble, and be honest about uncertainty where it exists. Then propose 3 to 5 follow-up questions that a genuinely curious person would want to ask next, grounded in what you just said — not a generic fixed checklist (avoid vague categories like "Economic factors" or "Considerations"). Prefer real questions ("Why does X happen?", "How does this compare to Y?", "What would have to be true for this to fail?") over noun-phrase labels, and pick whichever angles actually matter for THIS question. Each follow-up needs one precise sentence explaining why it matters. Respond with ONLY JSON: {"answer":"your 2-4 sentence answer","branches":[{"title":"a specific follow-up question","description":"one precise sentence on why it matters"}]}. No prose outside the JSON. ${NO_MARKDOWN}`,
     };
   }
   if (body.action === "chat") {
@@ -128,11 +129,12 @@ function userContentFor(body: Body): string {
 function localFallback(body: Body) {
   if (body.action === "decompose") {
     return {
+      answer: "No AI provider is configured, so this is a local placeholder rather than a real answer. Add GEMINI_API_KEY or GROQ_API_KEY in .env.local to get a real answer here.",
       branches: [
-        { title: "Core evidence", description: `Gather the strongest available evidence bearing directly on: ${body.question}` },
-        { title: "Counterarguments", description: "Identify the strongest reasons the answer might be no, or more limited than assumed." },
-        { title: "Feasibility & constraints", description: "Investigate practical, technical, or resource constraints that shape the answer." },
-        { title: "Stakeholder impact", description: "Consider who is affected and how their incentives shape the outcome." },
+        { title: "What evidence would settle this?", description: `Gather the strongest available evidence bearing directly on: ${body.question}` },
+        { title: "What's the strongest case against this?", description: "Identify the strongest reasons the answer might be no, or more limited than assumed." },
+        { title: "What practical constraints shape this?", description: "Investigate practical, technical, or resource constraints that shape the answer." },
+        { title: "Who is most affected, and how?", description: "Consider who is affected and how their incentives shape the outcome." },
       ],
     };
   }

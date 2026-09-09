@@ -24,16 +24,17 @@ export function QuestionNode({ id, data, selected }: Props) {
         onKeyDown={(e) => e.stopPropagation()}
       />
       {data.status === "error" && <p className="node-error">{data.error || "Something went wrong."}</p>}
+      {data.answer && <p className="node-answer-preview">{data.answer}</p>}
       <div className="node-footer">
         {data.status === "error" ? (
           <button className="node-primary nodrag" onClick={() => data.onAction?.("retryExplore", id)}>
             <RotateCcw size={13} /> Retry
           </button>
-        ) : (
+        ) : !data.answer ? (
           <button className="node-primary nodrag" disabled={!data.title.trim() || loading} onClick={() => data.onAction?.("explore", id)}>
-            {loading ? "Generating research paths…" : "Explore with AI"} {!loading && <ArrowRight size={13} />}
+            {loading ? "Thinking…" : "Explore with AI"} {!loading && <ArrowRight size={13} />}
           </button>
-        )}
+        ) : null}
       </div>
     </NodeShell>
   );

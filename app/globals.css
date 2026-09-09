@@ -72,6 +72,15 @@ kbd { font-size: 10px; background: #f4f1f6; border-radius: 5px; padding: 3px 5px
 .composer textarea { border: 0; outline: 0; resize: none; width: 100%; min-height: 38px; max-height: 100px; padding: 5px; background: transparent; }
 .send { position: absolute; right: 6px; bottom: 9px; background: #7355e9; color: white; border-radius: 7px; width: 27px; height: 27px; display: grid; place-items: center; }
 .send:disabled { opacity: .45; }
+.followup-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.followup-chip { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; border: 1px solid #e9e6ed; border-radius: 9px; padding: 9px 10px; font-size: 12.5px; color: #3c3743; transition: .15s; }
+.followup-chip:hover { border-color: #cfc3fb; background: #faf9ff; color: #5e42d4; }
+.followup-chip svg { color: #a89fc0; flex-shrink: 0; }
+.followup-composer { display: flex; gap: 6px; margin-bottom: 4px; }
+.followup-composer input { flex: 1; border: 1px solid #dedae4; border-radius: 9px; padding: 8px 10px; font-size: 12.5px; }
+.followup-composer input:focus { outline: 0; border-color: #aa99f4; box-shadow: 0 0 0 3px rgba(115,85,233,.1); }
+.followup-composer button { width: 34px; border: 1px solid #dedae4; border-radius: 9px; display: grid; place-items: center; }
+.followup-composer button:disabled { opacity: .4; }
 .challenge-block { border-top: 1px solid #eeeaf1; margin-top: 4px; padding-top: 14px; }
 .challenge-block p { font-size: 12.5px; }
 .challenge-lead { font-weight: 600; color: #3c3743 !important; }
@@ -98,6 +107,7 @@ kbd { font-size: 10px; background: #f4f1f6; border-radius: 5px; padding: 3px 5px
 .node-primary { width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; background: #7355e9; color: #fff; border-radius: 9px; padding: 8px; font-size: 12px; font-weight: 500; }
 .node-primary:disabled { opacity: .5; }
 .node-error { color: #9a3b3b; font-size: 11px; margin: 6px 0 0; }
+.canvas-node p.node-answer-preview { font-size: 12px; line-height: 1.5; color: #514b5c; margin: 4px 0 0; -webkit-line-clamp: 4; }
 .node-question-input { border: 0; outline: 0; resize: none; width: 100%; font-size: 14px; line-height: 1.45; font-weight: 500; color: #2a2632; background: transparent; margin: 8px 0; padding: 0; font-family: inherit; }
 .node-question-input::placeholder { color: #a89fc0; font-weight: 400; }
 .node-title-input { border: 0; outline: 0; width: 100%; font-size: 15px; font-weight: 600; color: #2a2632; background: transparent; margin: 10px 0 6px; padding: 0; font-family: inherit; }

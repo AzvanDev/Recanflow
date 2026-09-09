@@ -11,7 +11,7 @@ type Request =
   | { action: "challenge"; insightTitle: string; insightSummary: string; keyPoints: string[] };
 
 type DataFor<A extends Request["action"]> = A extends "decompose"
-  ? { branches: Branch[] }
+  ? { answer: string; branches: Branch[] }
   : A extends "chat"
     ? { reply: string }
     : A extends "synthesize"

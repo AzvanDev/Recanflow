@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ArrowRight, Bookmark, ChevronRight, RotateCcw, Send, ShieldQuestion, Sparkles, Telescope, X } from "lucide-react";
+import type { Edge } from "@xyflow/react";
+import { ArrowRight, Bookmark, ChevronRight, Plus, RotateCcw, Send, ShieldQuestion, Sparkles, Telescope, X } from "lucide-react";
 import type { FlowNode } from "@/lib/types";
 import { KIND_LABEL } from "./nodes/shared";
 
@@ -11,18 +12,23 @@ export type PanelActions = {
   synthesize: (findingIds: string[]) => void;
   challenge: (insightId: string) => void;
   createQuestionFromChallenge: (insightId: string) => void;
+  addFollowUp: (parentId: string, title: string) => void;
   selectNode: (id: string) => void;
   startQuestion: () => void;
 };
 
 export function AIResearchPanel({
   selected,
+  nodes,
+  edges,
   open,
   onClose,
   actions,
   synthesizing,
 }: {
   selected: FlowNode[];
+  nodes: FlowNode[];
+  edges: Edge[];
   open: boolean;
   onClose: () => void;
   actions: PanelActions;
@@ -56,7 +62,7 @@ export function AIResearchPanel({
         ) : selected.length > 1 ? (
           <MultiSelectView selected={selected} actions={actions} />
         ) : selected[0] ? (
-          <SingleNodeView key={selected[0].id} node={selected[0]} actions={actions} />
+          <SingleNodeView key={selected[0].id} node={selected[0]} nodes={nodes} edges={edges} actions={actions} />
         ) : (
           <HomeView actions={actions} />
         )}
@@ -92,16 +98,42 @@ function MultiSelectView({ selected, actions }: { selected: FlowNode[]; actions:
   return <p>Select at least 2 Finding nodes (and nothing else) to create an Insight.</p>;
 }
 
-function SingleNodeView({ node, actions }: { node: FlowNode; actions: PanelActions }) {
+function SingleNodeView({ node, nodes, edges, actions }: { node: FlowNode; nodes: FlowNode[]; edges: Edge[]; actions: PanelActions }) {
   const { data } = node;
   if (data.kind === "question") {
+    const followUps = edges
+      .filter((e) => e.source === node.id)
+      .map((e) => nodes.find((n) => n.id === e.target))
+      .filter((n): n is FlowNode => !!n && n.data.kind === "branch");
     return (
       <>
-        <p>{data.title || "Give this question some text, then explore it with AI."}</p>
+        {!data.answer && <p>{data.title || "Give this question some text, then explore it with AI."}</p>}
         {data.status === "error" && <ErrorBanner message={data.error} onRetry={() => actions.explore(node.id)} />}
-        <button className="primary wide" disabled={!data.title.trim() || data.status === "loading"} onClick={() => actions.explore(node.id)}>
-          {data.status === "loading" ? "Generating research paths…" : "Explore with AI"} {data.status !== "loading" && <ArrowRight size={15} />}
-        </button>
+        {data.answer && (
+          <>
+            <span className="eyebrow">ANSWER</span>
+            <p>{data.answer}</p>
+          </>
+        )}
+        {!data.answer && (
+          <button className="primary wide" disabled={!data.title.trim() || data.status === "loading"} onClick={() => actions.explore(node.id)}>
+            {data.status === "loading" ? "Thinking…" : "Explore with AI"} {data.status !== "loading" && <ArrowRight size={15} />}
+          </button>
+        )}
+        {followUps.length > 0 && (
+          <>
+            <span className="eyebrow">FOLLOW-UP QUESTIONS</span>
+            <div className="followup-list">
+              {followUps.map((f) => (
+                <button key={f.id} className="followup-chip" onClick={() => actions.openResearch(f.id)}>
+                  <span>{f.data.title}</span>
+                  <ChevronRight size={14} />
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+        {data.answer && <FollowUpComposer onSubmit={(text) => actions.addFollowUp(node.id, text)} />}
       </>
     );
   }
@@ -135,6 +167,31 @@ function SingleNodeView({ node, actions }: { node: FlowNode; actions: PanelActio
   if (data.kind === "insight") return <InsightView node={node} actions={actions} />;
 
   return <p>{data.content || "Edit this note directly on the canvas."}</p>;
+}
+
+function FollowUpComposer({ onSubmit }: { onSubmit: (text: string) => void }) {
+  const [value, setValue] = useState("");
+  function submit() {
+    if (!value.trim()) return;
+    onSubmit(value.trim());
+    setValue("");
+  }
+  return (
+    <div className="followup-composer">
+      <input
+        placeholder="Ask your own follow-up…"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Enter") submit();
+        }}
+      />
+      <button className="node-action" disabled={!value.trim()} onClick={submit} aria-label="Add follow-up">
+        <Plus size={14} />
+      </button>
+    </div>
+  );
 }
 
 function ErrorBanner({ message, onRetry }: { message?: string; onRetry: () => void }) {

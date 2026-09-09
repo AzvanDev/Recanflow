@@ -35,6 +35,7 @@ export type FlowNodeData = {
   content?: string;
   status?: NodeStatus;
   error?: string;
+  answer?: string;
   messages?: ChatMessage[];
   keyPoints?: string[];
   supportingEvidence?: string[];

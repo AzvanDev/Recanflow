@@ -178,19 +178,32 @@ export function Workspace() {
     if (!question || !question.data.title.trim()) return;
     patchNode(questionId, { status: "loading", error: undefined });
     try {
-      const { branches } = await callAI({ action: "decompose", question: question.data.title });
+      const { answer, branches } = await callAI({ action: "decompose", question: question.data.title });
       const parent = nodesRef.current.find((n) => n.id === questionId)!;
       const positions = layoutChildrenBelow(nodesRef.current, parent, "branch", branches.length);
       const ids = branches.map(() => newId("branch"));
       const newNodes: FlowNode[] = branches.map((b, i) => ({ id: ids[i], type: "branch", position: positions[i], data: { kind: "branch", title: b.title, description: b.description } }));
       const newEdges: Edge[] = ids.map((bid) => ({ id: `e-${questionId}-${bid}`, source: questionId, target: bid, type: "smoothstep" }));
       pushNodes(newNodes, newEdges);
-      patchNode(questionId, { status: "idle" });
+      patchNode(questionId, { status: "idle", answer });
       window.setTimeout(() => flow?.fitView({ padding: 0.25, duration: 350 }), 60);
     } catch (err) {
-      patchNode(questionId, { status: "error", error: err instanceof Error ? err.message : "Could not generate branches." });
+      patchNode(questionId, { status: "error", error: err instanceof Error ? err.message : "Could not generate an answer." });
     }
   }, [patchNode, pushNodes, flow]);
+
+  const addFollowUp = useCallback((parentId: string, title: string) => {
+    if (!title.trim()) return;
+    const parent = nodesRef.current.find((n) => n.id === parentId);
+    if (!parent) return;
+    const id = newId("branch");
+    const pos = layoutChildOf(nodesRef.current, parent, "branch");
+    pushNodes(
+      [{ id, type: "branch", position: pos, data: { kind: "branch", title: title.trim(), description: "" } }],
+      [{ id: `e-${parentId}-${id}`, source: parentId, target: id, type: "smoothstep" }],
+    );
+    setToast("Follow-up added to canvas");
+  }, [pushNodes]);
 
   const openResearch = useCallback((id: string) => {
     const node = nodesRef.current.find((n) => n.id === id);
@@ -325,9 +338,10 @@ export function Workspace() {
     synthesize,
     challenge,
     createQuestionFromChallenge,
+    addFollowUp,
     selectNode,
     startQuestion: () => addQuestion(),
-  }), [explore, openResearch, sendChat, saveFinding, synthesize, challenge, createQuestionFromChallenge, selectNode, addQuestion]);
+  }), [explore, openResearch, sendChat, saveFinding, synthesize, challenge, createQuestionFromChallenge, addFollowUp, selectNode, addQuestion]);
 
   const onConnect = useCallback((connection: Connection) => {
     setEdges((es) => addEdge({ ...connection, type: "smoothstep" }, es));
@@ -484,7 +498,7 @@ export function Workspace() {
         </aside>
       )}
 
-      <AIResearchPanel selected={selectedNodes} open={panelOpen} onClose={() => setPanelOpen(false)} actions={panelActions} synthesizing={synthesizing} />
+      <AIResearchPanel selected={selectedNodes} nodes={nodes} edges={edges} open={panelOpen} onClose={() => setPanelOpen(false)} actions={panelActions} synthesizing={synthesizing} />
       {!panelOpen && (
         <button className="ai-launcher floating" onClick={() => setPanelOpen(true)} aria-label="Open AI panel">
           <Sparkles size={18} />
