@@ -3,18 +3,10 @@
  * retrieved — never model-generated URLs or titles. The LLM layer (app/api/ai/route.ts) is
  * responsible for turning retrieved sources into an answer; providers never synthesize text.
  */
-import type { ResearchSource } from "./types";
+import type { ResearchSource, VideoMetadata } from "./types";
 
 export type SourceMetadata = ResearchSource;
-
-export type VideoMetadata = {
-  videoId: string;
-  title: string;
-  thumbnail: string;
-  channelTitle: string;
-  publishedAt: string;
-  url: string;
-};
+export type { VideoMetadata };
 
 export type SearchResult = {
   sources: SourceMetadata[];

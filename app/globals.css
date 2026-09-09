@@ -88,6 +88,13 @@ kbd { font-size: 10px; background: #f4f1f6; border-radius: 5px; padding: 3px 5px
 .source-card-head svg { color: #a89fc0; flex-shrink: 0; }
 .source-domain { font-size: 10.5px; color: #8c8498; }
 .source-snippet { font-size: 11.5px; color: #706a78; margin: 4px 0 0; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.videos-row { margin: 4px 0 14px; }
+.videos-scroll { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; margin-top: 6px; }
+.video-card { flex: 0 0 132px; display: flex; flex-direction: column; text-decoration: none; color: inherit; border-radius: 9px; overflow: hidden; border: 1px solid #e9e6ed; transition: .15s; }
+.video-card:hover { border-color: #cfc3fb; }
+.video-thumb { width: 132px; height: 74px; object-fit: cover; background: #f3f0fd; display: block; }
+.video-title { font-size: 11px; font-weight: 500; color: #3c3743; padding: 6px 7px 2px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.video-channel { font-size: 10px; color: #948d9d; padding: 0 7px 7px; }
 .thinking { display: flex; gap: 8px; align-items: center; color: #726b7b; }
 .thinking span { width: 7px; height: 7px; border-radius: 50%; background: #7657ea; animation: pulse 1s infinite; }
 .composer { position: relative; margin-top: 4px; border: 1px solid #dedae4; border-radius: 11px; padding: 5px 38px 5px 9px; transition: .15s; }

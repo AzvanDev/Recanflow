@@ -19,6 +19,7 @@ import { createWorkspace, deleteWorkspace, listWorkspaces, loadWorkspace, newId,
 import { buildLineageContext } from "@/lib/context";
 import { layoutChildrenBelow, layoutChildOf, layoutBelowGroup, viewportCenterPosition } from "@/lib/layout";
 import { callAI } from "@/lib/ai-client";
+import { fetchRelatedVideos } from "@/lib/youtube-client";
 import type { ChatMessage, Confidence, DebateStance, FlowNode, FlowNodeData, NodeAction, NodeKind } from "@/lib/types";
 import { useHistory } from "@/lib/history";
 
@@ -210,6 +211,13 @@ export function Workspace() {
     setToast("Follow-up added to canvas");
   }, [pushNodes]);
 
+  // Fetches once per research node and caches on it (videosFetched) so repeat visits never
+  // re-query — real YouTube Data API results only, resolves to [] (never an error) if unavailable.
+  const fetchVideosForResearch = useCallback(async (researchId: string, topic: string, context?: string) => {
+    const videos = await fetchRelatedVideos(topic, context);
+    patchNode(researchId, { videos, videosFetched: true });
+  }, [patchNode]);
+
   const openResearch = useCallback((id: string) => {
     const node = nodesRef.current.find((n) => n.id === id);
     if (!node) return;
@@ -246,7 +254,8 @@ export function Workspace() {
       [{ id: `e-${id}-${researchId}`, source: id, target: researchId, type: "smoothstep" }],
     );
     selectOnly([researchId]);
-  }, [pushNodes, selectOnly]);
+    fetchVideosForResearch(researchId, node.data.title, question?.data.title);
+  }, [pushNodes, selectOnly, fetchVideosForResearch]);
 
   const sendChat = useCallback(async (researchId: string, message: string) => {
     const research = nodesRef.current.find((n) => n.id === researchId);

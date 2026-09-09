@@ -9,6 +9,8 @@ export type ChatMessage = { id: string; role: "user" | "assistant"; content: str
 
 export type ResearchSource = { id: string; title: string; url: string; domain: string; snippet: string; publishedAt?: string };
 
+export type VideoMetadata = { videoId: string; title: string; thumbnail: string; channelTitle: string; publishedAt: string; url: string };
+
 export type Provenance = { questionId?: string; questionTitle?: string; branchId?: string; branchTitle?: string; researchId?: string };
 
 export type ChallengeResult = {
@@ -56,6 +58,8 @@ export type FlowNodeData = {
   findingIds?: string[];
   provenance?: Provenance;
   sources?: ResearchSource[];
+  videos?: VideoMetadata[];
+  videosFetched?: boolean;
   challenge?: ChallengeResult;
   debateSummary?: DebateSummary;
   onAction?: (action: NodeAction, id: string, payload?: unknown) => void;

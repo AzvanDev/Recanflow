@@ -1,7 +1,8 @@
 import { useState } from "react";
+import Image from "next/image";
 import type { Edge } from "@xyflow/react";
 import { ArrowRight, Bookmark, ChevronRight, ExternalLink, HelpCircle, ListChecks, Plus, RotateCcw, Scale, Send, ShieldQuestion, Sparkles, Swords, Telescope, ThumbsDown, ThumbsUp, X } from "lucide-react";
-import type { DebateStance, FlowNode, ResearchSource } from "@/lib/types";
+import type { DebateStance, FlowNode, ResearchSource, VideoMetadata } from "@/lib/types";
 import { KIND_LABEL } from "./nodes/shared";
 
 export type PanelActions = {
@@ -225,6 +226,23 @@ function ErrorBanner({ message, onRetry }: { message?: string; onRetry: () => vo
   );
 }
 
+function RelatedVideos({ videos }: { videos: VideoMetadata[] }) {
+  return (
+    <div className="videos-row">
+      <span className="eyebrow">RELATED VIDEOS</span>
+      <div className="videos-scroll">
+        {videos.map((v) => (
+          <a key={v.videoId} className="video-card" href={v.url} target="_blank" rel="noopener noreferrer">
+            {v.thumbnail && <Image src={v.thumbnail} alt="" width={160} height={90} className="video-thumb" unoptimized />}
+            <span className="video-title">{v.title}</span>
+            <span className="video-channel">{v.channelTitle}</span>
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SourcesList({ sources }: { sources: ResearchSource[] }) {
   return (
     <div className="sources-list">
@@ -258,6 +276,7 @@ function ResearchChat({ node, actions }: { node: FlowNode; actions: PanelActions
   return (
     <>
       <p>{node.data.description}</p>
+      {node.data.videos && node.data.videos.length > 0 && <RelatedVideos videos={node.data.videos} />}
       <div className="chat-thread">
         {messages.length === 0 && !busy && <p className="chat-empty">Ask a research question about this branch to begin.</p>}
         {messages.map((m) => (
