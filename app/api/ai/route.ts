@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { createTavilyProvider } from "@/lib/providers/tavily";
+import type { SourceMetadata } from "@/lib/research-provider";
 
 /**
  * Model instructions to avoid Markdown are honored inconsistently (LLMs are probabilistic,
@@ -130,7 +132,7 @@ function instructionFor(body: Body): { system: string; wantsJson: boolean } {
   if (body.action === "chat") {
     return {
       wantsJson: false,
-      system: `You are a research assistant investigating one specific branch of a larger question. Be direct, concrete, and efficient: lead with the most important point in the first sentence, then support it. Where relevant, clearly separate factual claims from reasoning, assumptions, and open uncertainty (e.g. "Fact: ...", "Assumption: ...") but only when it adds real clarity, not as boilerplate. Keep the whole answer tight — well under 200 words unless the question genuinely requires more, and never pad with generic caveats or restating the question. Do not claim to have browsed the web or cite sources you were not given — you are reasoning from general knowledge only. ${NO_MARKDOWN}`,
+      system: `You are a research assistant investigating one specific branch of a larger question. Be direct, concrete, and efficient: lead with the most important point in the first sentence, then support it. Where relevant, clearly separate factual claims from reasoning, assumptions, and open uncertainty (e.g. "Fact: ...", "Assumption: ...") but only when it adds real clarity, not as boilerplate. Keep the whole answer tight — well under 200 words unless the question genuinely requires more, and never pad with generic caveats or restating the question. If the background below includes a "Retrieved sources" section, those are real search results — ground your answer in them and you may refer to them naturally (e.g. "according to X"), but never invent a citation, statistic, or source beyond what is given there. If no "Retrieved sources" section is present, you have no live search — reason from general knowledge only and do not claim to have browsed the web. ${NO_MARKDOWN}`,
     };
   }
   if (body.action === "synthesize") {
@@ -203,7 +205,7 @@ function localFallback(body: Body) {
     };
   }
   if (body.action === "chat") {
-    return { reply: "No AI provider is configured, so this is a local placeholder. Add GEMINI_API_KEY or GROQ_API_KEY in .env.local to get real research responses." };
+    return { reply: "No AI provider is configured, so this is a local placeholder. Add GEMINI_API_KEY or GROQ_API_KEY in .env.local to get real research responses.", researched: false, sources: [] };
   }
   if (body.action === "synthesize") {
     return {
@@ -295,19 +297,48 @@ async function callGroq(body: Body): Promise<{ text: string; provider: "groq" }>
   return { text, provider: "groq" };
 }
 
+/** Formats retrieved sources into a labeled block the chat instruction tells the model to ground its answer in. */
+function formatRetrievedSources(sources: SourceMetadata[]): string {
+  return `Retrieved sources:\n${sources.map((s, i) => `${i + 1}. ${s.title} (${s.domain})\n${s.snippet}`).join("\n\n")}`;
+}
+
+/** Real retrieval only — never invents a source. Returns [] (not an error) if no provider is configured or the search fails, so chat always degrades to honest non-grounded mode rather than breaking. */
+async function retrieveSources(query: string): Promise<SourceMetadata[]> {
+  const key = process.env.TAVILY_API_KEY;
+  if (!key) return [];
+  try {
+    const provider = createTavilyProvider(key);
+    const { sources } = await provider.search(query);
+    return sources;
+  } catch (err) {
+    console.error("Search retrieval failed", err);
+    return [];
+  }
+}
+
 export async function POST(request: Request) {
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ success: false, error: "Please provide a valid request." }, { status: 400 });
   const body = parsed.data;
   const { wantsJson } = instructionFor(body);
 
-  const providers: (() => Promise<{ text: string; provider: "gemini" | "groq" }>)[] = [() => callGemini(body), () => callGroq(body)];
+  const sources = body.action === "chat" ? await retrieveSources(body.message) : [];
+  const groundedBody: Body = sources.length > 0 && body.action === "chat" ? { ...body, context: `${formatRetrievedSources(sources)}\n\n${body.context}` } : body;
+
+  const providers: (() => Promise<{ text: string; provider: "gemini" | "groq" }>)[] = [() => callGemini(groundedBody), () => callGroq(groundedBody)];
   let lastError: unknown = null;
 
   for (const provider of providers) {
     try {
       const { text, provider: name } = await provider();
-      if (!wantsJson) return NextResponse.json({ success: true, data: { reply: sanitizeAiText(text) }, provider: name, researched: false });
+      if (!wantsJson) {
+        return NextResponse.json({
+          success: true,
+          data: { reply: sanitizeAiText(text), researched: sources.length > 0, sources: deepSanitize(sources) },
+          provider: name,
+          researched: sources.length > 0,
+        });
+      }
       const data = deepSanitize(parseStructured(body, text));
       return NextResponse.json({ success: true, data, provider: name, researched: false });
     } catch (err) {

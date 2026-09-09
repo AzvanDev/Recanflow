@@ -5,7 +5,7 @@ export type NodeStatus = "idle" | "loading" | "error";
 export type Confidence = "high" | "medium" | "low";
 export type DebateStance = "for" | "against" | "balanced" | "challenge" | "respond";
 
-export type ChatMessage = { id: string; role: "user" | "assistant"; content: string; stance?: DebateStance };
+export type ChatMessage = { id: string; role: "user" | "assistant"; content: string; stance?: DebateStance; researched?: boolean; sources?: ResearchSource[] };
 
 export type ResearchSource = { id: string; title: string; url: string; domain: string; snippet: string; publishedAt?: string };
 

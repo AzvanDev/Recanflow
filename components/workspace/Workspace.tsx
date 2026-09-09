@@ -256,8 +256,8 @@ export function Workspace() {
     const userMessage: ChatMessage = { id: newId("msg"), role: "user", content: message };
     patchNode(researchId, (d) => ({ status: "loading", error: undefined, messages: [...(d.messages || []), userMessage] }));
     try {
-      const { reply } = await callAI({ action: "chat", topic: research.data.title, context, history, message });
-      patchNode(researchId, (d) => ({ status: "idle", messages: [...(d.messages || []), { id: newId("msg"), role: "assistant", content: reply }] }));
+      const { reply, researched, sources } = await callAI({ action: "chat", topic: research.data.title, context, history, message });
+      patchNode(researchId, (d) => ({ status: "idle", messages: [...(d.messages || []), { id: newId("msg"), role: "assistant", content: reply, researched, sources }] }));
     } catch (err) {
       patchNode(researchId, { status: "error", error: err instanceof Error ? err.message : "The research assistant is unavailable." });
     }

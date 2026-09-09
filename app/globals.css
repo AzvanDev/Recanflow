@@ -79,6 +79,15 @@ kbd { font-size: 10px; background: #f4f1f6; border-radius: 5px; padding: 3px 5px
 .chat-message.assistant.stance-challenge .chat-role { color: #a3721b; }
 .chat-message p { color: #3c3743; margin: 4px 0 6px; white-space: pre-wrap; }
 .chat-role { font-size: 10px; font-weight: 600; letter-spacing: .06em; color: #a099ac; text-transform: uppercase; }
+.model-only-badge { display: inline-block; font-size: 10px; color: #a3721b; background: #fdf3e2; border-radius: 5px; padding: 2px 6px; margin: 2px 0 6px; }
+.sources-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 6px; }
+.source-card { display: block; border: 1px solid #e9e6ed; border-radius: 9px; padding: 8px 10px; text-decoration: none; color: inherit; transition: .15s; }
+.source-card:hover { border-color: #cfc3fb; background: #faf9ff; }
+.source-card-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.source-title { font-size: 12px; font-weight: 500; color: #3c3743; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-card-head svg { color: #a89fc0; flex-shrink: 0; }
+.source-domain { font-size: 10.5px; color: #8c8498; }
+.source-snippet { font-size: 11.5px; color: #706a78; margin: 4px 0 0; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .thinking { display: flex; gap: 8px; align-items: center; color: #726b7b; }
 .thinking span { width: 7px; height: 7px; border-radius: 50%; background: #7657ea; animation: pulse 1s infinite; }
 .composer { position: relative; margin-top: 4px; border: 1px solid #dedae4; border-radius: 11px; padding: 5px 38px 5px 9px; transition: .15s; }

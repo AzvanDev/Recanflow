@@ -1,4 +1,4 @@
-import type { ChatMessage, Confidence, DebateStance, DebateSummary } from "./types";
+import type { ChatMessage, Confidence, DebateStance, DebateSummary, ResearchSource } from "./types";
 
 type Branch = { title: string; description: string };
 type SynthesisResult = { title: string; summary: string; keyPoints: string[]; supportingEvidence: string[]; confidence: Confidence };
@@ -16,7 +16,7 @@ type Request =
 type DataFor<A extends Request["action"]> = A extends "decompose"
   ? { answer: string; branches: Branch[] }
   : A extends "chat"
-    ? { reply: string }
+    ? { reply: string; researched: boolean; sources: ResearchSource[] }
     : A extends "synthesize"
       ? SynthesisResult
       : A extends "challenge"

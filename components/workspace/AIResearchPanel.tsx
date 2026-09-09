@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Edge } from "@xyflow/react";
-import { ArrowRight, Bookmark, ChevronRight, HelpCircle, ListChecks, Plus, RotateCcw, Scale, Send, ShieldQuestion, Sparkles, Swords, Telescope, ThumbsDown, ThumbsUp, X } from "lucide-react";
-import type { DebateStance, FlowNode } from "@/lib/types";
+import { ArrowRight, Bookmark, ChevronRight, ExternalLink, HelpCircle, ListChecks, Plus, RotateCcw, Scale, Send, ShieldQuestion, Sparkles, Swords, Telescope, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import type { DebateStance, FlowNode, ResearchSource } from "@/lib/types";
 import { KIND_LABEL } from "./nodes/shared";
 
 export type PanelActions = {
@@ -225,6 +225,24 @@ function ErrorBanner({ message, onRetry }: { message?: string; onRetry: () => vo
   );
 }
 
+function SourcesList({ sources }: { sources: ResearchSource[] }) {
+  return (
+    <div className="sources-list">
+      <span className="eyebrow">SOURCES</span>
+      {sources.map((s) => (
+        <a key={s.id || s.url} className="source-card" href={s.url} target="_blank" rel="noopener noreferrer">
+          <div className="source-card-head">
+            <span className="source-title">{s.title}</span>
+            <ExternalLink size={12} />
+          </div>
+          <span className="source-domain">{s.domain}</span>
+          {s.snippet && <p className="source-snippet">{s.snippet}</p>}
+        </a>
+      ))}
+    </div>
+  );
+}
+
 function ResearchChat({ node, actions }: { node: FlowNode; actions: PanelActions }) {
   const [draft, setDraft] = useState("");
   const messages = node.data.messages || [];
@@ -246,6 +264,8 @@ function ResearchChat({ node, actions }: { node: FlowNode; actions: PanelActions
           <div key={m.id} className={`chat-message ${m.role}`}>
             <span className="chat-role">{m.role === "user" ? "You" : "AI"}</span>
             <p>{m.content}</p>
+            {m.role === "assistant" && m.researched === false && <span className="model-only-badge">Model reasoning — no live sources</span>}
+            {m.role === "assistant" && m.sources && m.sources.length > 0 && <SourcesList sources={m.sources} />}
             {m.role === "assistant" && (
               <button className="node-action" onClick={() => actions.saveFinding(node.id, m.content)}>
                 <Bookmark size={12} /> Save as finding
