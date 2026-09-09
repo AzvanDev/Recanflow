@@ -260,6 +260,12 @@ function ResearchChat({ node, actions }: { node: FlowNode; actions: PanelActions
         <button className="node-action" disabled={!lastAssistant || busy} onClick={() => send("Go deeper on the most important open question from your last answer.")}>
           <Telescope size={13} /> Research deeper
         </button>
+        <button className="node-action" disabled={!lastAssistant || busy} onClick={() => send("What evidence or reasoning most strongly supports your last answer?")}>
+          <ThumbsUp size={13} /> Find evidence
+        </button>
+        <button className="node-action" disabled={!lastAssistant || busy} onClick={() => send("What evidence or reasoning would most challenge or contradict your last answer?")}>
+          <ThumbsDown size={13} /> Find counter-evidence
+        </button>
       </div>
       <div className="composer">
         <textarea
