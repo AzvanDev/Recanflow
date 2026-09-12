@@ -10,8 +10,17 @@ kbd { font-size: 10px; background: #f4f1f6; border-radius: 5px; padding: 3px 5px
 .workspace { height: 100vh; overflow: hidden; background-image: radial-gradient(#e5e2e9 1px, transparent 1px); background-size: 22px 22px; position: relative; }
 .react-flow { background: transparent; }
 .react-flow__attribution { display: none; }
+.react-flow__edge-path { stroke: #d8d4de; stroke-width: 1.5; }
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:hover .react-flow__edge-path { stroke: #a894f0; }
 
 .floating { position: fixed; z-index: 10; background: rgba(255,255,255,.97); border: 1px solid #e7e4eb; box-shadow: 0 8px 24px rgba(35,27,50,.08); border-radius: 14px; }
+
+/* Focus Branch: dims everything outside the active branch without touching layout or interactivity */
+.canvas-node.dimmed, .react-flow__node.dimmed { opacity: .35; transition: opacity .25s ease; }
+.canvas-node.dimmed:hover { opacity: .6; }
+.exit-focus { top: 70px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 6px; padding: 8px 14px; font-size: 12px; font-weight: 500; color: #5e42d4; animation: panel-in .15s ease-out; }
+.exit-focus:hover { background: #f7f4ff; }
 
 /* header */
 .top-left { top: 14px; left: 14px; height: 42px; display: flex; align-items: center; gap: 9px; padding: 5px 10px 5px 6px; }
@@ -47,13 +56,15 @@ kbd { font-size: 10px; background: #f4f1f6; border-radius: 5px; padding: 3px 5px
 .workspace-row-delete { padding: 6px !important; color: #a89fc0; flex-shrink: 0; }
 .workspace-row-delete:hover { color: #b23b3b; background: #fdf2f2 !important; }
 
-/* AI panel */
-.ai-panel { top: 70px; right: 16px; bottom: 82px; width: 380px; overflow: auto; padding: 17px; animation: panel-in .18s ease-out; }
-.panel-header { display: flex; justify-content: space-between; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid #efecf2; }
+/* AI panel — header stays fixed, panel-body is the only scroll region, so long threads never
+   push the header or the composer/search input out of view. */
+.ai-panel { top: 70px; right: 16px; bottom: 82px; width: 380px; overflow: hidden; padding: 17px; display: flex; flex-direction: column; animation: panel-in .18s ease-out; }
+.panel-header { flex: none; display: flex; justify-content: space-between; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid #efecf2; }
 .panel-header h2 { font-size: 17px; line-height: 1.3; margin: 5px 0 0; font-weight: 600; }
 .panel-header > button { width: 28px; height: 28px; border-radius: 8px; color: #807887; }
 .panel-header > button:hover { background: #f0ecfa; color: #6544d8; }
-.panel-body { padding-top: 20px; }
+.panel-toolbar { flex: none; padding-top: 14px; }
+.panel-body { flex: 1; min-height: 0; overflow-y: auto; padding-top: 20px; }
 .panel-body p { line-height: 1.65; color: #706a78; margin: 0 0 16px; }
 .panel-body .eyebrow { display: block; margin: 0 0 8px; }
 .panel-body .eyebrow:not(:first-child) { margin-top: 4px; }
@@ -97,7 +108,7 @@ kbd { font-size: 10px; background: #f4f1f6; border-radius: 5px; padding: 3px 5px
 .video-channel { font-size: 10px; color: #948d9d; padding: 0 7px 7px; }
 .thinking { display: flex; gap: 8px; align-items: center; color: #726b7b; }
 .thinking span { width: 7px; height: 7px; border-radius: 50%; background: #7657ea; animation: pulse 1s infinite; }
-.composer { position: relative; margin-top: 4px; border: 1px solid #dedae4; border-radius: 11px; padding: 5px 38px 5px 9px; transition: .15s; }
+.composer { position: sticky; bottom: 0; margin-top: 10px; border: 1px solid #dedae4; border-radius: 11px; padding: 5px 38px 5px 9px; background: #fff; box-shadow: 0 -10px 14px -6px rgba(255,255,255,.95); transition: .15s; }
 .composer:focus-within { border-color: #aa99f4; box-shadow: 0 0 0 3px rgba(115,85,233,.1); }
 .composer textarea { border: 0; outline: 0; resize: none; width: 100%; min-height: 38px; max-height: 100px; padding: 5px; background: transparent; }
 .send { position: absolute; right: 6px; bottom: 9px; background: #7355e9; color: white; border-radius: 7px; width: 27px; height: 27px; display: grid; place-items: center; }
@@ -133,12 +144,9 @@ kbd { font-size: 10px; background: #f4f1f6; border-radius: 5px; padding: 3px 5px
 .research-result-actions { display: flex; gap: 8px; }
 
 .canvas-node.researchBranch { border-color: #c3ddf0; }
-.research-branch-items { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
-.research-branch-item { border-top: 1px solid #eeeaf1; padding-top: 8px; display: flex; flex-direction: column; gap: 2px; }
-.research-branch-item:first-child { border-top: 0; padding-top: 0; }
-.research-branch-item-title { font-size: 12px; font-weight: 600; color: #2a2632; line-height: 1.4; }
-.research-branch-item-meta { font-size: 10.5px; color: #8c8498; }
-.research-branch-item .node-action { margin-top: 2px; }
+.research-branch-items { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
+.research-branch-item-title { font-size: 12px; font-weight: 500; color: #3c3743; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.research-branch-more { font-size: 11px; color: #8c8498; margin-top: 1px; }
 
 /* canvas nodes */
 .canvas-node { width: 268px; min-height: 130px; border-radius: 14px; border: 1px solid #dfdbe4; background: rgba(255,255,255,.98); box-shadow: 0 7px 18px rgba(43,33,61,.08); padding: 14px 14px 11px; position: relative; display: flex; flex-direction: column; gap: 2px; }

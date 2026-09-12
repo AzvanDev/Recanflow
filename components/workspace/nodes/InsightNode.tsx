@@ -6,7 +6,7 @@ import { NodeShell, StatusBadge } from "./shared";
 export function InsightNode({ id, data, selected }: NodeProps<Node<FlowNodeData>>) {
   const count = data.findingIds?.length ?? 0;
   return (
-    <NodeShell kind="insight" selected={selected}>
+    <NodeShell kind="insight" selected={selected} dimmed={data.dimmed}>
       <div className="node-kicker-trailer">
         <StatusBadge status={data.status} />
       </div>

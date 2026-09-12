@@ -9,7 +9,7 @@ export function ResearchNode({ id, data, selected }: NodeProps<Node<FlowNodeData
   const editableTitle = !data.provenance;
 
   return (
-    <NodeShell kind="research" selected={selected}>
+    <NodeShell kind="research" selected={selected} dimmed={data.dimmed}>
       <div className="node-kicker-trailer">
         <StatusBadge status={data.status} />
       </div>

@@ -5,7 +5,7 @@ import { NodeShell } from "./shared";
 
 export function BranchNode({ id, data, selected }: NodeProps<Node<FlowNodeData>>) {
   return (
-    <NodeShell kind="branch" selected={selected}>
+    <NodeShell kind="branch" selected={selected} dimmed={data.dimmed}>
       <h3>{data.title}</h3>
       <p>{data.description}</p>
       <div className="node-footer">

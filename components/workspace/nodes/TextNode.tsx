@@ -48,7 +48,7 @@ export function TextNode({ id, data, selected }: Props) {
   }
 
   return (
-    <div className={`canvas-node text-bare ${selected ? "selected" : ""}`} style={{ width }}>
+    <div className={`canvas-node text-bare ${selected ? "selected" : ""} ${data.dimmed ? "dimmed" : ""}`} style={{ width }}>
       <Handle type="target" position={Position.Top} />
 
       <textarea

@@ -111,6 +111,8 @@ export type FlowNodeData = {
   width?: number;
   researchItems?: ResearchItem[];
   onAction?: (action: NodeAction, id: string, payload?: unknown) => void;
+  /** Render-only: true while a Focus Branch is active and this node sits outside it. Never persisted. */
+  dimmed?: boolean;
 };
 
 export type FlowNode = Node<FlowNodeData>;

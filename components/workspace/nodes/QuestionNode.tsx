@@ -13,7 +13,7 @@ export function QuestionNode({ id, data, selected }: Props) {
   const loading = data.status === "loading";
 
   return (
-    <NodeShell kind="question" selected={selected}>
+    <NodeShell kind="question" selected={selected} dimmed={data.dimmed}>
       <textarea
         ref={ref}
         className="nodrag node-question-input"
@@ -31,7 +31,7 @@ export function QuestionNode({ id, data, selected }: Props) {
           </button>
         ) : !data.answer ? (
           <button className="node-primary nodrag" disabled={!data.title.trim() || loading} onClick={() => data.onAction?.("explore", id)}>
-            {loading ? "Thinking…" : "Explore with AI"} {!loading && <ArrowRight size={13} />}
+            {loading ? "Generating answer…" : "Explore with AI"} {!loading && <ArrowRight size={13} />}
           </button>
         ) : null}
       </div>

@@ -61,19 +61,21 @@ export function StatusBadge({ status }: { status?: NodeStatus }) {
 export function NodeShell({
   kind,
   selected,
+  dimmed,
   showHandles = true,
   className = "",
   children,
 }: {
   kind: NodeKind;
   selected?: boolean;
+  dimmed?: boolean;
   showHandles?: boolean;
   className?: string;
   children: ReactNode;
 }) {
   const Icon = KIND_ICON[kind];
   return (
-    <div className={`canvas-node ${kind} ${selected ? "selected" : ""} ${className}`}>
+    <div className={`canvas-node ${kind} ${selected ? "selected" : ""} ${dimmed ? "dimmed" : ""} ${className}`}>
       {showHandles && <Handle type="target" position={Position.Top} />}
       <div className="node-kicker">
         <Icon size={13} /> {KIND_LABEL[kind].toUpperCase()}

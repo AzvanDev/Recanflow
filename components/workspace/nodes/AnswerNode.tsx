@@ -20,7 +20,7 @@ export function AnswerNode({ id, data, selected }: NodeProps<Node<FlowNodeData>>
   }
 
   return (
-    <NodeShell kind="answer" selected={selected}>
+    <NodeShell kind="answer" selected={selected} dimmed={data.dimmed}>
       <p className="node-answer-preview">{data.content}</p>
 
       {data.suggestions && data.suggestions.length > 0 && (

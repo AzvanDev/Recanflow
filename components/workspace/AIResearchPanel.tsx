@@ -128,7 +128,7 @@ function SingleNodeView({ node, nodes, edges, actions }: { node: FlowNode; nodes
         {data.status === "error" && <ErrorBanner message={data.error} onRetry={() => actions.explore(node.id)} />}
         {!data.answer && (
           <button className="primary wide" disabled={!data.title.trim() || data.status === "loading"} onClick={() => actions.explore(node.id)}>
-            {data.status === "loading" ? "Thinking…" : "Explore with AI"} {data.status !== "loading" && <ArrowRight size={15} />}
+            {data.status === "loading" ? "Generating answer…" : "Explore with AI"} {data.status !== "loading" && <ArrowRight size={15} />}
           </button>
         )}
         {answerNode && (

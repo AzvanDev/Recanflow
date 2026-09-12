@@ -4,7 +4,7 @@ import { NodeShell } from "./shared";
 
 export function FindingNode({ id, data, selected }: NodeProps<Node<FlowNodeData>>) {
   return (
-    <NodeShell kind="finding" selected={selected}>
+    <NodeShell kind="finding" selected={selected} dimmed={data.dimmed}>
       <h3>{data.title}</h3>
       <textarea
         className="nodrag node-editable-text"

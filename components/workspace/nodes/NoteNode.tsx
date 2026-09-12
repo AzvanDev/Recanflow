@@ -9,7 +9,7 @@ export function NoteNode({ id, data, selected }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   useAutoFocus(ref, data.autoFocus);
   return (
-    <NodeShell kind="note" selected={selected}>
+    <NodeShell kind="note" selected={selected} dimmed={data.dimmed}>
       <textarea
         ref={ref}
         className="nodrag node-editable-text"

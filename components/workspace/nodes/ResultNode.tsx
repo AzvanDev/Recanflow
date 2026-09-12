@@ -4,7 +4,7 @@ import { NodeShell } from "./shared";
 
 export function ResultNode({ data, selected }: NodeProps<Node<FlowNodeData>>) {
   return (
-    <NodeShell kind="result" selected={selected}>
+    <NodeShell kind="result" selected={selected} dimmed={data.dimmed}>
       <h3>{data.title}</h3>
       <p className="node-answer-preview">{data.content}</p>
     </NodeShell>

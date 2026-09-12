@@ -103,7 +103,7 @@ export function OpenResearchPortal({ defaultQuery, onClose, onAdd }: OpenResearc
           <X size={17} />
         </button>
       </div>
-      <div className="panel-body">
+      <div className="panel-toolbar">
         <p>What do you want to research?</p>
         <div className="open-research-search">
           <input
@@ -130,7 +130,8 @@ export function OpenResearchPortal({ defaultQuery, onClose, onAdd }: OpenResearc
           </p>
         )}
         {uploadError && <p className="node-error">{uploadError}</p>}
-
+      </div>
+      <div className="panel-body">
         {uploadedItems.length > 0 && (
           <>
             <span className="eyebrow">UPLOADED</span>
@@ -155,7 +156,7 @@ export function OpenResearchPortal({ defaultQuery, onClose, onAdd }: OpenResearc
         <span className="eyebrow">RESEARCH RESULTS</span>
         {searching && (
           <p className="thinking">
-            <span /> Searching…
+            <span /> Searching research…
           </p>
         )}
         {!searching && searched && results.length === 0 && <p className="chat-empty">No research results found. Try a different search.</p>}

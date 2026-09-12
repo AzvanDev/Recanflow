@@ -13,7 +13,7 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { CircleHelp, Clipboard, Map as MapIcon, Network, PanelLeft, Plus, Sparkles, Trash2, X, ZoomIn, ZoomOut } from "lucide-react";
+import { CircleHelp, Clipboard, Map as MapIcon, Minimize2, Network, PanelLeft, Plus, Sparkles, Trash2, X, ZoomIn, ZoomOut } from "lucide-react";
 
 import { createWorkspace, deleteWorkspace, listWorkspaces, loadWorkspace, newId, saveWorkspace, switchWorkspace, type WorkspaceSummary } from "@/lib/workspace";
 import { buildLineageContext, buildSelectionContext } from "@/lib/context";
@@ -118,6 +118,7 @@ export function Workspace() {
   const [selectionBusy, setSelectionBusy] = useState(false);
   const [openResearchAnswerId, setOpenResearchAnswerId] = useState<string | null>(null);
   const [openResearchQuery, setOpenResearchQuery] = useState("");
+  const [focusedIds, setFocusedIds] = useState<Set<string> | null>(null);
 
   const { undo, redo, canUndo, canRedo } = useHistory(nodes, edges, setNodes, setEdges);
 
@@ -173,6 +174,17 @@ export function Workspace() {
     nodesRef.current = nodesRef.current.map(apply);
     if (ids.length) setPanelOpen(true);
   }, [setNodes]);
+
+  // Centers the viewport on exactly this branch (parent + newly created node(s)) instead of
+  // re-fitting the whole graph, and quietly dims everything outside it so the branch the user
+  // just acted on stays legible as the canvas grows. Positions are never touched — this only
+  // moves the camera and toggles a render-only opacity flag.
+  const focusOn = useCallback((ids: string[]) => {
+    window.setTimeout(() => flow?.fitView({ nodes: ids.map((id) => ({ id })), padding: 0.35, duration: 400, maxZoom: 1.1 }), 60);
+    setFocusedIds(new Set(ids));
+  }, [flow]);
+
+  const exitFocus = useCallback(() => setFocusedIds(null), []);
 
   // -- node creation --
   const addQuestion = useCallback((position?: { x: number; y: number }, title = "") => {
@@ -239,11 +251,11 @@ export function Workspace() {
       patchNode(questionId, { status: "idle", answer });
       const rootQuestion = findRootQuestion(questionId, nodesRef.current, edgesRef.current);
       fetchVideosFor(answerId, question.data.title, rootQuestion?.data.title);
-      window.setTimeout(() => flow?.fitView({ padding: 0.25, duration: 350 }), 60);
+      if (!existingAnswerEdge) focusOn([questionId, answerId]);
     } catch (err) {
       patchNode(questionId, { status: "error", error: err instanceof Error ? err.message : "Could not generate an answer." });
     }
-  }, [patchNode, pushNodes, flow, fetchVideosFor]);
+  }, [patchNode, pushNodes, focusOn, fetchVideosFor]);
 
   // Turns a click — on a suggestion chip or the Answer's "+" composer — into a new child
   // Question connected to that Answer, then immediately explores it, so suggested and
@@ -261,9 +273,9 @@ export function Workspace() {
       [{ id, type: "question", position: pos, data: { kind: "question", title: title.trim(), status: "idle" } }],
       [{ id: `e-${answerId}-${id}`, source: answerId, target: id, type: "smoothstep" }],
     );
-    window.setTimeout(() => flow?.fitView({ padding: 0.25, duration: 350 }), 60);
+    focusOn([answerId, id]);
     explore(id);
-  }, [pushNodes, flow, explore]);
+  }, [pushNodes, focusOn, explore]);
 
   const openResearch = useCallback((id: string) => {
     const node = nodesRef.current.find((n) => n.id === id);
@@ -346,13 +358,13 @@ export function Workspace() {
         findingIds.map((fid) => ({ id: `e-${fid}-${insightId}`, source: fid, target: insightId, type: "smoothstep" })),
       );
       selectOnly([insightId]);
-      window.setTimeout(() => flow?.fitView({ padding: 0.25, duration: 350 }), 60);
+      focusOn([...findingIds, insightId]);
     } catch (err) {
       setToast(err instanceof Error ? err.message : "Could not synthesize these findings.");
     } finally {
       setSynthesizing(false);
     }
-  }, [pushNodes, flow, selectOnly]);
+  }, [pushNodes, focusOn, selectOnly]);
 
   const challenge = useCallback(async (insightId: string) => {
     const insight = nodesRef.current.find((n) => n.id === insightId);
@@ -376,8 +388,8 @@ export function Workspace() {
     pushNodes([{ id, type: "question", position: pos, data: { kind: "question", title, status: "idle" } }], [{ id: `e-${parentId}-${id}`, source: parentId, target: id, type: "smoothstep" }]);
     selectOnly([id]);
     setFocusNodeId(id);
-    window.setTimeout(() => flow?.fitView({ padding: 0.25, duration: 350 }), 60);
-  }, [pushNodes, flow, selectOnly]);
+    focusOn([parentId, id]);
+  }, [pushNodes, focusOn, selectOnly]);
 
   const createQuestionFromChallenge = useCallback((insightId: string) => {
     const insight = nodesRef.current.find((n) => n.id === insightId);
@@ -402,7 +414,8 @@ export function Workspace() {
       [{ id: `e-${sourceId}-${id}`, source: sourceId, target: id, type: "smoothstep" }],
     );
     selectOnly([id]);
-  }, [pushNodes, selectOnly]);
+    focusOn([sourceId, id]);
+  }, [pushNodes, selectOnly, focusOn]);
 
   const sendDebateTurn = useCallback(async (debateId: string, stance: DebateStance, apiMessage: string, visibleUserMessage?: string) => {
     const debate = nodesRef.current.find((n) => n.id === debateId);
@@ -449,8 +462,9 @@ export function Workspace() {
       [{ id: `e-${answerId}-${id}`, source: answerId, target: id, type: "smoothstep" }],
     );
     selectOnly([id]);
+    focusOn([answerId, id]);
     argueDebate(id, stance);
-  }, [pushNodes, selectOnly, argueDebate]);
+  }, [pushNodes, selectOnly, focusOn, argueDebate]);
 
   const respondDebate = useCallback((debateId: string, text: string) => {
     const debate = nodesRef.current.find((n) => n.id === debateId);
@@ -472,11 +486,11 @@ export function Workspace() {
       const newEdges: Edge[] = ids.map((bid) => ({ id: `e-${debateId}-${bid}`, source: debateId, target: bid, type: "smoothstep" }));
       pushNodes(newNodes, newEdges);
       patchNode(debateId, { status: "idle" });
-      window.setTimeout(() => flow?.fitView({ padding: 0.25, duration: 350 }), 60);
+      focusOn([debateId, ...ids]);
     } catch (err) {
       patchNode(debateId, { status: "error", error: err instanceof Error ? err.message : "Could not find what would change your mind." });
     }
-  }, [patchNode, pushNodes, flow]);
+  }, [patchNode, pushNodes, focusOn]);
 
   const summarizeDebate = useCallback(async (debateId: string) => {
     const debate = nodesRef.current.find((n) => n.id === debateId);
@@ -513,13 +527,13 @@ export function Workspace() {
         selected.map((n) => ({ id: `e-${n.id}-${resultId}`, source: n.id, target: resultId, type: "smoothstep" })),
       );
       selectOnly([resultId]);
-      window.setTimeout(() => flow?.fitView({ padding: 0.25, duration: 350 }), 60);
+      focusOn([...selected.map((n) => n.id), resultId]);
     } catch (err) {
       setToast(err instanceof Error ? err.message : "Could not generate a result for this selection.");
     } finally {
       setSelectionBusy(false);
     }
-  }, [pushNodes, selectOnly, flow]);
+  }, [pushNodes, selectOnly, focusOn]);
 
   const selectNode = useCallback((id: string) => {
     selectOnly([id]);
@@ -534,7 +548,8 @@ export function Workspace() {
     setOpenResearchQuery(question?.data.title || "");
     setOpenResearchAnswerId(answerId);
     setPanelOpen(true);
-  }, []);
+    focusOn([answerId]);
+  }, [focusOn]);
 
   const closeOpenResearch = useCallback(() => setOpenResearchAnswerId(null), []);
 
@@ -720,6 +735,7 @@ export function Workspace() {
         setSearch(false);
         setHelpOpen(false);
         selectOnly([]);
+        exitFocus();
       } else if ((e.key === "Delete" || e.key === "Backspace") && hasDeletableSelection) {
         deleteSelected();
       } else if (e.key.toLowerCase() === "v") setTool("select");
@@ -743,8 +759,8 @@ export function Workspace() {
   });
 
   const renderNodes = useMemo(
-    () => nodes.map((n) => ({ ...n, data: { ...n.data, onAction: handleAction, autoFocus: n.id === focusNodeId } })),
-    [nodes, handleAction, focusNodeId],
+    () => nodes.map((n) => ({ ...n, data: { ...n.data, onAction: handleAction, autoFocus: n.id === focusNodeId, dimmed: focusedIds ? !focusedIds.has(n.id) : false } })),
+    [nodes, handleAction, focusNodeId, focusedIds],
   );
 
   const effectiveTool: Tool = spaceHeld ? "hand" : tool;
@@ -797,6 +813,12 @@ export function Workspace() {
       ) : (
         <button className="minimap-reopen floating" aria-label="Show minimap" title="Show minimap" onClick={() => setMinimapOpen(true)}>
           <MapIcon size={16} />
+        </button>
+      )}
+
+      {focusedIds && (
+        <button className="exit-focus floating" onClick={exitFocus}>
+          <Minimize2 size={13} /> Exit focus
         </button>
       )}
 

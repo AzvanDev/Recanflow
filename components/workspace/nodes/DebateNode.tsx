@@ -19,7 +19,7 @@ export function DebateNode({ id, data, selected }: NodeProps<Node<FlowNodeData>>
   }
 
   return (
-    <NodeShell kind="debate" selected={selected}>
+    <NodeShell kind="debate" selected={selected} dimmed={data.dimmed}>
       <div className="node-kicker-trailer">
         <StatusBadge status={data.status} />
       </div>
@@ -49,7 +49,7 @@ export function DebateNode({ id, data, selected }: NodeProps<Node<FlowNodeData>>
                 <p>{m.content}</p>
               </div>
             ))}
-            {busy && <p className="thinking-inline">Thinking…</p>}
+            {busy && <p className="thinking thinking-inline"><span /> Thinking…</p>}
           </div>
           <div className="debate-composer nodrag">
             <input
