@@ -113,6 +113,8 @@ export type FlowNodeData = {
   onAction?: (action: NodeAction, id: string, payload?: unknown) => void;
   /** Render-only: true while a Focus Branch is active and this node sits outside it. Never persisted. */
   dimmed?: boolean;
+  /** True once the user has manually dragged this node — local auto-layout then leaves it alone and treats it as an obstacle instead of repositioning it. */
+  movedByUser?: boolean;
 };
 
 export type FlowNode = Node<FlowNodeData>;

@@ -10,6 +10,8 @@ import {
   useNodesState,
   type Connection,
   type Edge,
+  type NodeChange,
+  type NodePositionChange,
   type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -17,7 +19,7 @@ import { CircleHelp, Clipboard, Map as MapIcon, Minimize2, Network, PanelLeft, P
 
 import { createWorkspace, deleteWorkspace, listWorkspaces, loadWorkspace, newId, saveWorkspace, switchWorkspace, type WorkspaceSummary } from "@/lib/workspace";
 import { buildLineageContext, buildSelectionContext } from "@/lib/context";
-import { layoutChildrenBelow, layoutChildOf, layoutBelowGroup, layoutNextSiblingBelow, viewportCenterPosition } from "@/lib/layout";
+import { layoutChildrenBelow, layoutChildOf, layoutBelowGroup, layoutFamilyRow, viewportCenterPosition } from "@/lib/layout";
 import { callAI } from "@/lib/ai-client";
 import { fetchRelatedVideos } from "@/lib/youtube-client";
 import type { ChatMessage, Confidence, DebateStance, FlowNode, FlowNodeData, NodeAction, NodeKind, ResearchItem } from "@/lib/types";
@@ -165,6 +167,33 @@ export function Workspace() {
     nodesRef.current = nodesRef.current.map(apply);
   }, [setNodes]);
 
+  // Moves a batch of existing nodes to newly computed positions — used by local layout
+  // (layoutFamilyRow) to gently reflow a parent's still-auto-positioned children when a new
+  // sibling is added. Never touches nodes the user has manually dragged.
+  const repositionNodes = useCallback((patches: { id: string; position: { x: number; y: number } }[]) => {
+    if (!patches.length) return;
+    const byId = new Map(patches.map((p) => [p.id, p.position]));
+    const apply = (n: FlowNode) => (byId.has(n.id) ? { ...n, position: byId.get(n.id)! } : n);
+    setNodes((prev) => prev.map(apply));
+    nodesRef.current = nodesRef.current.map(apply);
+  }, [setNodes]);
+
+  // Wraps XYFlow's own onNodesChange to notice real user drags (dragging:false marks a drag's
+  // last change) and flip movedByUser on that node — our own programmatic setNodes calls
+  // (pushNodes/patchNode/repositionNodes) never go through this handler, so this can only ever
+  // be set by an actual user interaction, never by local auto-layout itself.
+  const handleNodesChange = useCallback((changes: NodeChange<FlowNode>[]) => {
+    onNodesChange(changes);
+    const draggedIds = changes
+      .filter((c): c is NodePositionChange => c.type === "position" && c.dragging === false)
+      .map((c) => c.id);
+    if (!draggedIds.length) return;
+    const draggedSet = new Set(draggedIds);
+    const apply = (n: FlowNode) => (draggedSet.has(n.id) ? { ...n, data: { ...n.data, movedByUser: true } } : n);
+    setNodes((prev) => prev.map(apply));
+    nodesRef.current = nodesRef.current.map(apply);
+  }, [onNodesChange, setNodes]);
+
   // Selects exactly these node ids by writing node.selected directly, the same field XYFlow
   // itself updates on a user click — keeps programmatic and click-driven selection consistent.
   const selectOnly = useCallback((ids: string[]) => {
@@ -245,7 +274,7 @@ export function Workspace() {
         const pos = layoutChildOf(nodesRef.current, parent, "answer");
         pushNodes(
           [{ id: answerId, type: "answer", position: pos, data: { kind: "answer", title: "Answer", content: answer, suggestions, sources, status: "idle" } }],
-          [{ id: `e-${questionId}-${answerId}`, source: questionId, target: answerId, type: "smoothstep" }],
+          [{ id: `e-${questionId}-${answerId}`, source: questionId, target: answerId, type: "default" }],
         );
       }
       patchNode(questionId, { status: "idle", answer });
@@ -266,16 +295,20 @@ export function Workspace() {
     if (!title.trim()) return;
     const parent = nodesRef.current.find((n) => n.id === answerId);
     if (!parent) return;
-    const siblingIndex = edgesRef.current.filter((e) => e.source === answerId).length;
-    const pos = layoutNextSiblingBelow(nodesRef.current, parent, "question", siblingIndex);
+    const siblings = edgesRef.current
+      .filter((e) => e.source === answerId)
+      .map((e) => nodesRef.current.find((n) => n.id === e.target))
+      .filter((n): n is FlowNode => !!n && n.data.kind === "question");
+    const { repositioned, newChildPosition } = layoutFamilyRow(nodesRef.current, parent, siblings, "question");
     const id = newId("question");
     pushNodes(
-      [{ id, type: "question", position: pos, data: { kind: "question", title: title.trim(), status: "idle" } }],
-      [{ id: `e-${answerId}-${id}`, source: answerId, target: id, type: "smoothstep" }],
+      [{ id, type: "question", position: newChildPosition, data: { kind: "question", title: title.trim(), status: "idle" } }],
+      [{ id: `e-${answerId}-${id}`, source: answerId, target: id, type: "default" }],
     );
-    focusOn([answerId, id]);
+    repositionNodes(repositioned);
+    focusOn([answerId, id, ...repositioned.map((r) => r.id)]);
     explore(id);
-  }, [pushNodes, focusOn, explore]);
+  }, [pushNodes, repositionNodes, focusOn, explore]);
 
   const openResearch = useCallback((id: string) => {
     const node = nodesRef.current.find((n) => n.id === id);
@@ -310,7 +343,7 @@ export function Workspace() {
           },
         },
       ],
-      [{ id: `e-${id}-${researchId}`, source: id, target: researchId, type: "smoothstep" }],
+      [{ id: `e-${id}-${researchId}`, source: id, target: researchId, type: "default" }],
     );
     selectOnly([researchId]);
     fetchVideosFor(researchId, node.data.title, question?.data.title);
@@ -338,7 +371,7 @@ export function Workspace() {
     const pos = layoutChildOf(nodesRef.current, research, "finding");
     pushNodes(
       [{ id: findingId, type: "finding", position: pos, data: { kind: "finding", title: summarize(content), content, provenance: research.data.provenance ? { ...research.data.provenance, researchId } : { researchId } } }],
-      [{ id: `e-${researchId}-${findingId}`, source: researchId, target: findingId, type: "smoothstep" }],
+      [{ id: `e-${researchId}-${findingId}`, source: researchId, target: findingId, type: "default" }],
     );
     patchNode(researchId, (d) => ({ findingIds: [...(d.findingIds || []), findingId] }));
     setToast("Finding added to canvas");
@@ -355,7 +388,7 @@ export function Workspace() {
       const insightId = newId("insight");
       pushNodes(
         [{ id: insightId, type: "insight", position: pos, data: { kind: "insight", title: result.title, description: result.summary, keyPoints: result.keyPoints, supportingEvidence: result.supportingEvidence, confidence: result.confidence as Confidence, findingIds, status: "idle" } }],
-        findingIds.map((fid) => ({ id: `e-${fid}-${insightId}`, source: fid, target: insightId, type: "smoothstep" })),
+        findingIds.map((fid) => ({ id: `e-${fid}-${insightId}`, source: fid, target: insightId, type: "default" })),
       );
       selectOnly([insightId]);
       focusOn([...findingIds, insightId]);
@@ -385,7 +418,7 @@ export function Workspace() {
     if (!parent) return;
     const id = newId("question");
     const pos = layoutChildOf(nodesRef.current, parent, "question");
-    pushNodes([{ id, type: "question", position: pos, data: { kind: "question", title, status: "idle" } }], [{ id: `e-${parentId}-${id}`, source: parentId, target: id, type: "smoothstep" }]);
+    pushNodes([{ id, type: "question", position: pos, data: { kind: "question", title, status: "idle" } }], [{ id: `e-${parentId}-${id}`, source: parentId, target: id, type: "default" }]);
     selectOnly([id]);
     setFocusNodeId(id);
     focusOn([parentId, id]);
@@ -411,7 +444,7 @@ export function Workspace() {
     const pos = layoutChildOf(nodesRef.current, source, "debate");
     pushNodes(
       [{ id, type: "debate", position: pos, data: { kind: "debate", title: source.data.title, description: grounding || "", messages: [], status: "idle" } }],
-      [{ id: `e-${sourceId}-${id}`, source: sourceId, target: id, type: "smoothstep" }],
+      [{ id: `e-${sourceId}-${id}`, source: sourceId, target: id, type: "default" }],
     );
     selectOnly([id]);
     focusOn([sourceId, id]);
@@ -459,7 +492,7 @@ export function Workspace() {
     const pos = layoutChildOf(nodesRef.current, answer, "debate");
     pushNodes(
       [{ id, type: "debate", position: pos, data: { kind: "debate", title: question?.data.title || "Debate", messages: [], status: "idle", sources: answer.data.sources } }],
-      [{ id: `e-${answerId}-${id}`, source: answerId, target: id, type: "smoothstep" }],
+      [{ id: `e-${answerId}-${id}`, source: answerId, target: id, type: "default" }],
     );
     selectOnly([id]);
     focusOn([answerId, id]);
@@ -483,7 +516,7 @@ export function Workspace() {
       const positions = layoutChildrenBelow(nodesRef.current, parent, "branch", cruxes.length);
       const ids = cruxes.map(() => newId("branch"));
       const newNodes: FlowNode[] = cruxes.map((c, i) => ({ id: ids[i], type: "branch", position: positions[i], data: { kind: "branch", title: c.title, description: c.description } }));
-      const newEdges: Edge[] = ids.map((bid) => ({ id: `e-${debateId}-${bid}`, source: debateId, target: bid, type: "smoothstep" }));
+      const newEdges: Edge[] = ids.map((bid) => ({ id: `e-${debateId}-${bid}`, source: debateId, target: bid, type: "default" }));
       pushNodes(newNodes, newEdges);
       patchNode(debateId, { status: "idle" });
       focusOn([debateId, ...ids]);
@@ -524,7 +557,7 @@ export function Workspace() {
       const pos = layoutBelowGroup(nodesRef.current, selected, "result");
       pushNodes(
         [{ id: resultId, type: "result", position: pos, data: { kind: "result", title: question || "Summary", content: reply } }],
-        selected.map((n) => ({ id: `e-${n.id}-${resultId}`, source: n.id, target: resultId, type: "smoothstep" })),
+        selected.map((n) => ({ id: `e-${n.id}-${resultId}`, source: n.id, target: resultId, type: "default" })),
       );
       selectOnly([resultId]);
       focusOn([...selected.map((n) => n.id), resultId]);
@@ -575,7 +608,7 @@ export function Workspace() {
     const pos = layoutChildOf(nodesRef.current, answer, "researchBranch");
     pushNodes(
       [{ id, type: "researchBranch", position: pos, data: { kind: "researchBranch", title: "Research", researchItems: [item] } }],
-      [{ id: `e-${answerId}-${id}`, source: answerId, target: id, type: "smoothstep" }],
+      [{ id: `e-${answerId}-${id}`, source: answerId, target: id, type: "default" }],
     );
     setToast("Research branch created");
   }, [pushNodes, patchNode]);
@@ -621,7 +654,7 @@ export function Workspace() {
   }), [explore, openResearch, sendChat, saveFinding, synthesize, challenge, createQuestionFromChallenge, addFollowUp, startDebate, startAnswerDebate, argueDebate, respondDebate, getCruxes, summarizeDebate, exploreUnresolved, selectNode, openOpenResearch, addQuestion]);
 
   const onConnect = useCallback((connection: Connection) => {
-    setEdges((es) => addEdge({ ...connection, type: "smoothstep" }, es));
+    setEdges((es) => addEdge({ ...connection, type: "default" }, es));
   }, [setEdges]);
 
   const hasDeletableSelection = selection.length > 0 || edges.some((e) => e.selected);
@@ -771,7 +804,7 @@ export function Workspace() {
         nodes={renderNodes}
         edges={edges}
         nodeTypes={nodeTypes}
-        onNodesChange={onNodesChange}
+        onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onInit={setFlow}
@@ -797,7 +830,7 @@ export function Workspace() {
         selectionOnDrag={effectiveTool === "select"}
         panOnDrag={effectiveTool === "hand" || spaceHeld}
         multiSelectionKeyCode="Shift"
-        defaultEdgeOptions={{ type: "smoothstep" }}
+        defaultEdgeOptions={{ type: "default" }}
       >
         <Background gap={22} size={1} color="#e9e7ef" />
         {minimapOpen && <MiniMap pannable zoomable className="minimap" />}

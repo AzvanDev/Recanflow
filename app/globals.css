@@ -13,6 +13,9 @@ kbd { font-size: 10px; background: #f4f1f6; border-radius: 5px; padding: 3px 5px
 .react-flow__edge-path { stroke: #d8d4de; stroke-width: 1.5; }
 .react-flow__edge.selected .react-flow__edge-path,
 .react-flow__edge:hover .react-flow__edge-path { stroke: #a894f0; }
+/* Local layout moves nodes smoothly (redistributing siblings, new-branch placement); a node
+   actively being dragged is excluded so manual dragging stays instant and lag-free. */
+.react-flow__node:not(.dragging) { transition: transform .22s ease; }
 
 .floating { position: fixed; z-index: 10; background: rgba(255,255,255,.97); border: 1px solid #e7e4eb; box-shadow: 0 8px 24px rgba(35,27,50,.08); border-radius: 14px; }
 
