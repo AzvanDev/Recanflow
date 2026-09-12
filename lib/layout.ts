@@ -2,6 +2,7 @@ import type { NodeKind, FlowNode } from "./types";
 
 export const NODE_SIZE: Record<NodeKind, { width: number; height: number }> = {
   question: { width: 360, height: 200 },
+  answer: { width: 320, height: 240 },
   branch: { width: 280, height: 170 },
   research: { width: 300, height: 190 },
   finding: { width: 260, height: 170 },
@@ -9,6 +10,8 @@ export const NODE_SIZE: Record<NodeKind, { width: number; height: number }> = {
   note: { width: 240, height: 150 },
   text: { width: 220, height: 90 },
   debate: { width: 300, height: 190 },
+  result: { width: 300, height: 190 },
+  researchBranch: { width: 300, height: 190 },
 };
 
 const GAP_X = 48;
@@ -58,6 +61,15 @@ export function layoutChildrenBelow(existing: FlowNode[], parent: FlowNode, chil
 export function layoutChildOf(existing: FlowNode[], parent: FlowNode, childKind: NodeKind): { x: number; y: number } {
   const parentSize = NODE_SIZE[parent.data.kind] ?? NODE_SIZE.note;
   const x = parent.position.x;
+  const y = parent.position.y + parentSize.height + GAP_Y;
+  return placeClear(existing, childKind, x, y);
+}
+
+/** Places the Nth child spawned from the same parent side-by-side with its earlier siblings, so repeated branches off one Answer fan out instead of stacking. */
+export function layoutNextSiblingBelow(existing: FlowNode[], parent: FlowNode, childKind: NodeKind, siblingIndex: number): { x: number; y: number } {
+  const parentSize = NODE_SIZE[parent.data.kind] ?? NODE_SIZE.note;
+  const childSize = NODE_SIZE[childKind];
+  const x = parent.position.x + parentSize.width / 2 - childSize.width / 2 + siblingIndex * (childSize.width + GAP_X);
   const y = parent.position.y + parentSize.height + GAP_Y;
   return placeClear(existing, childKind, x, y);
 }

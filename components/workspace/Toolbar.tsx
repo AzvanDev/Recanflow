@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import { FileText, Hand, Lightbulb, MessageSquarePlus, MousePointer2, Redo2, Sparkles, Telescope, Type as TypeIcon, Undo2 } from "lucide-react";
 
-export type Tool = "select" | "hand";
+export type Tool = "select" | "hand" | "text";
 
 function ToolButton({
   icon: Icon,
@@ -41,7 +41,6 @@ export function Toolbar({
   canSaveFinding,
   onSynthesize,
   canSynthesize,
-  onCreateText,
   onUndo,
   onRedo,
   canUndo,
@@ -56,7 +55,6 @@ export function Toolbar({
   canSaveFinding: boolean;
   onSynthesize: () => void;
   canSynthesize: boolean;
-  onCreateText: () => void;
   onUndo: () => void;
   onRedo: () => void;
   canUndo: boolean;
@@ -85,7 +83,7 @@ export function Toolbar({
         onClick={onSynthesize}
       />
       <i />
-      <ToolButton icon={TypeIcon} label="New text" onClick={onCreateText} />
+      <ToolButton icon={TypeIcon} label="Text" shortcut="T" active={tool === "text"} onClick={() => onSelectTool("text")} />
       <i />
       <ToolButton icon={Undo2} label="Undo" shortcut="Ctrl+Z" disabled={!canUndo} onClick={onUndo} />
       <ToolButton icon={Redo2} label="Redo" shortcut="Ctrl+Shift+Z" disabled={!canRedo} onClick={onRedo} />

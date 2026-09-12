@@ -2,6 +2,8 @@
 
 Source of truth for future work on this codebase. Describes what actually exists in the code today, not what was planned. Update this file when behavior changes materially.
 
+This checkpoint reflects the codebase as of commit checkpointing Select+Summarize, the Debate rewrite, the Text tool, and the Open Research rewrite — all previously-uncommitted work described in earlier sections is now part of `master`.
+
 ## 1. Purpose & Product Vision
 
 ReCan Flow is a visual AI research workspace: an infinite canvas (built on `@xyflow/react`) where a user starts from a question and grows a branching map of AI-generated answers, follow-up questions, debates, text notes, and research material — instead of losing that structure across disconnected chat tabs. The guiding principle across every feature: **the underlying end-to-end workflow must actually work with real data** — no feature is "done" just because a button or panel exists, and nothing is ever fabricated (sources, papers, citations, authors) when a real provider is available.
@@ -142,8 +144,8 @@ ReCan Flow is a visual AI research workspace: an infinite canvas (built on `@xyf
 
 ## 16. Recommended Next Priorities
 
-1. Commit or deliberately discard the substantial work currently sitting uncommitted (Select/Summarize, Debate, Text tool, Open Research rewrite — see `git status`) before starting new feature work, so history stays meaningful.
-2. Decide whether to build the deferred "deep document understanding" feature (§14) now that its backend groundwork already exists, or remove the unused `analyzeDocument`/`documentChat` actions if it's off the roadmap.
-3. Add a second Open Research provider (Semantic Scholar or Crossref are the next-easiest, both keyless) to reduce single-provider dependency.
-4. Give Research Branch items a remove/dedupe affordance now that branches can accumulate many entries.
-5. If workspace schema changes become frequent, consider a lightweight version/migration step in `lib/workspace.ts` rather than silently orphaning old node kinds.
+1. Decide whether to build the deferred "deep document understanding" feature (§14) now that its backend groundwork already exists, or remove the unused `analyzeDocument`/`documentChat` actions if it's off the roadmap.
+2. Add a second Open Research provider (Semantic Scholar or Crossref are the next-easiest, both keyless) to reduce single-provider dependency.
+3. Give Research Branch items a remove/dedupe affordance now that branches can accumulate many entries.
+4. If workspace schema changes become frequent, consider a lightweight version/migration step in `lib/workspace.ts` rather than silently orphaning old node kinds.
+5. Push the checkpoint commit to `origin/master` when ready (not done as part of this checkpoint).

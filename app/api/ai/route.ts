@@ -38,7 +38,10 @@ const requestSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("decompose"), question: z.string().min(1).max(2000) }),
   z.object({
     action: z.literal("chat"),
-    topic: z.string().min(1).max(2000),
+    // A standalone research node can legitimately have no title yet (the user is invited to
+    // "ask a question" before naming the topic), so this must accept an empty string rather
+    // than reject the whole request.
+    topic: z.string().max(2000).optional().default(""),
     context: z.string().max(8000).optional().default(""),
     history: z.array(chatMessageSchema).max(40).optional().default([]),
     message: z.string().min(1).max(4000),
@@ -72,6 +75,27 @@ const requestSchema = z.discriminatedUnion("action", [
     topic: z.string().min(1).max(2000),
     history: z.array(chatMessageSchema).min(1).max(60),
   }),
+  z.object({
+    action: z.literal("selectionAsk"),
+    context: z.string().min(1).max(8000),
+    question: z.string().min(1).max(1000),
+  }),
+  z.object({
+    action: z.literal("selectionSummarize"),
+    context: z.string().min(1).max(8000),
+  }),
+  z.object({
+    action: z.literal("analyzeDocument"),
+    text: z.string().min(1).max(40000),
+    title: z.string().max(300).optional(),
+  }),
+  z.object({
+    action: z.literal("documentChat"),
+    documentText: z.string().min(1).max(40000),
+    title: z.string().max(300).optional(),
+    history: z.array(chatMessageSchema).max(40).optional().default([]),
+    message: z.string().min(1).max(2000),
+  }),
 ]);
 
 const branchesSchema = z.object({
@@ -94,6 +118,15 @@ const challengeSchema = z.object({
 });
 const cruxesSchema = z.object({
   cruxes: z.array(z.object({ title: z.string().min(1).max(240), description: z.string().min(1).max(600) })).min(3).max(5),
+});
+const documentAnalysisSchema = z.object({
+  summary: z.string().min(1).max(2000),
+  keyFindings: z.array(z.string()).max(10).default([]),
+  claims: z.array(z.string()).max(10).default([]),
+  methodology: z.string().max(1000).default(""),
+  limitations: z.array(z.string()).max(10).default([]),
+  evidence: z.array(z.string()).max(10).default([]),
+  openQuestions: z.array(z.string()).max(10).default([]),
 });
 const debateSummarySchema = z.object({
   currentPosition: z.string().max(600).default(""),
@@ -149,21 +182,45 @@ function instructionFor(body: Body): { system: string; wantsJson: boolean } {
   }
   if (body.action === "debate") {
     const stanceInstruction: Record<typeof body.stance, string> = {
-      for: "Argue FOR this position as rigorously and persuasively as you honestly can, using real reasoning — not fabricated statistics or invented sources.",
-      against: "Argue AGAINST this position as rigorously and persuasively as you honestly can, using real reasoning — not fabricated statistics or invented sources.",
-      balanced: "Give a balanced take: state the strongest case on each side and honestly weigh them against each other — do not dodge toward a wishy-washy middle just to seem fair.",
-      challenge: "The user has stated their own position. Challenge it as rigorously as a sharp, good-faith critic would: find the weakest link in their reasoning, name unstated assumptions, and offer the strongest real counter-evidence or counter-example. Do not simply agree or soften your critique to be polite.",
-      respond: "Continue this debate as an intellectually honest sparring partner responding to what the user just said. Acknowledge anything genuinely correct in their point in one clause at most, then push back with the strongest real counter-consideration — do not cave to agreement just because they pushed back, and do not repeat points already made earlier in the thread.",
+      for: "Defend this position, but with one point at a time, not a full case. Actively push back on the user's objections — yet when they land a real point, say so briefly (\"That's a fair objection\", \"You're right about the upfront cost\") before continuing to defend.",
+      against: "Challenge this position, but with your single strongest objection right now, not a full case. Focus on the strongest weakness rather than listing several. If the user pushes back with something solid, acknowledge it (\"That weakens the case somewhat\") before continuing to challenge.",
+      balanced: "Identify whichever side's reasoning is strongest given what's been said so far, respond directly to the user's actual point, and explain the real trade-off — without forcing yourself onto a side or listing both cases in full.",
+      challenge: "The user just stated their own position for the first time. Find the single weakest link in their reasoning, or the most important assumption they haven't examined, and challenge that one thing directly — don't survey everything that could be wrong with it.",
+      respond: "Respond to exactly what the user just said — reference their actual point, don't restate a generic position. Don't repeat an argument you already made earlier in this thread; if they didn't address your last point you can note that, but otherwise move the discussion forward with a new angle, example, or question.",
     };
     return {
       wantsJson: false,
-      system: `You are debating one specific position with the user, reasoning from general knowledge only (no live search, no fabricated citations or statistics). ${stanceInstruction[body.stance]} Keep it tight — under 150 words, lead with your strongest point first, no throat-clearing or restating the topic. ${NO_MARKDOWN}`,
+      system: `You are having a live back-and-forth debate conversation with the user about one specific position — not writing an essay, position paper, or lecture. Write like you're actually talking: respond specifically to what they just said rather than delivering a self-contained speech. Keep it short — roughly 100-180 words as a default (2-5 short paragraphs, or a few concise points), longer only if the user explicitly asks for more detail or evidence. Reveal one or two ideas at a time rather than dumping every argument, every piece of evidence, and a conclusion all at once — leave something for the next turn. When the user's point has real merit, say so briefly before pushing back; don't concede everything, and don't ignore it either. Often, but not every single time, end with one short, specific question that grows naturally out of what was just said, inviting them to respond — never a generic "what do you think?" tacked on out of habit. Reason from general knowledge and, if the background below includes an "Available sources" list, you may weave those real sources in naturally when relevant (e.g. "the source on X also points out...") rather than dumping a citation list — but you have no live search, so never invent a citation, statistic, or source beyond what's given there or general knowledge honestly supports. ${stanceInstruction[body.stance]} ${NO_MARKDOWN}`,
     };
   }
   if (body.action === "debateCruxes") {
     return {
       wantsJson: true,
       system: `You help turn a debated position into concrete research questions. Given the position below, identify 3 to 5 specific "cruxes" — the concrete pieces of evidence or facts that, if known, would most change confidence in this position one way or the other (per Julia Galef's "what would change your mind" framing). Each crux must be a specific, investigable question, not a vague theme. Respond with ONLY JSON: {"cruxes":[{"title":"a specific investigable question","description":"one sentence on why this evidence would be decisive"}]}. No prose outside the JSON. ${NO_MARKDOWN}`,
+    };
+  }
+  if (body.action === "selectionAsk") {
+    return {
+      wantsJson: false,
+      system: `You are answering a question about a specific set of nodes the user selected on their research canvas. Base your answer strictly on the selected content given below — never invent facts beyond it, and if the content doesn't fully answer the question, say so honestly. Be direct and concrete: lead with the actual answer, well under 150 words unless the question genuinely requires more. ${NO_MARKDOWN}`,
+    };
+  }
+  if (body.action === "selectionSummarize") {
+    return {
+      wantsJson: false,
+      system: `You are concisely summarizing a specific set of nodes the user selected on their research canvas. Identify the core point(s) and, where relevant, the key relationship between them (agreement, contrast, progression) rather than just restating each item in a list. Keep it tight: well under 150 words. ${NO_MARKDOWN}`,
+    };
+  }
+  if (body.action === "analyzeDocument") {
+    return {
+      wantsJson: true,
+      system: `You are analyzing a real uploaded research document. Base every part of your analysis strictly on the document text given below — never invent a finding, claim, methodology detail, or limitation that isn't actually supported by the text. If a section genuinely isn't present or determinable from the given text (e.g. no explicit methodology section), say so honestly in that field rather than guessing. Respond with ONLY JSON: {"summary":"2-4 sentence plain-language summary of what this document is and concludes","keyFindings":["a specific finding actually stated in the document"],"claims":["a specific important claim the document makes"],"methodology":"1-3 sentences describing the actual method used, or state plainly that it is not clearly stated in the provided text","limitations":["a limitation the document itself acknowledges, or a genuine gap you can identify from the text"],"evidence":["a specific piece of evidence the document cites in support of its conclusions"],"openQuestions":["a question the document leaves unresolved"]}. ${NO_MARKDOWN}`,
+    };
+  }
+  if (body.action === "documentChat") {
+    return {
+      wantsJson: false,
+      system: `You are answering questions about one specific document the user uploaded or is reviewing. Base your answer strictly on the document text given below — never invent information that isn't actually present in it. If the document doesn't contain the answer, say so plainly rather than guessing or drawing on outside knowledge as if it came from the document. Keep answers direct and concise — well under 150 words unless the question genuinely requires more. ${NO_MARKDOWN}`,
     };
   }
   return {
@@ -176,7 +233,7 @@ function userContentFor(body: Body): string {
   if (body.action === "decompose") return `Question: ${body.question}`;
   if (body.action === "chat") {
     const history = body.history.map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`).join("\n");
-    return `Research branch: ${body.topic}\n\nBackground:\n${body.context}\n\n${history ? `Conversation so far:\n${history}\n\n` : ""}User: ${body.message}`;
+    return `${body.topic ? `Research branch: ${body.topic}\n\n` : ""}Background:\n${body.context}\n\n${history ? `Conversation so far:\n${history}\n\n` : ""}User: ${body.message}`;
   }
   if (body.action === "synthesize") {
     const findings = body.findings.map((f, i) => `Finding ${i + 1} — ${f.title}: ${f.content}`).join("\n\n");
@@ -188,6 +245,13 @@ function userContentFor(body: Body): string {
     return `Position being debated: ${body.topic}\n\nBackground:\n${body.context}\n\n${history ? `Debate so far:\n${history}\n\n` : ""}User: ${body.message}`;
   }
   if (body.action === "debateCruxes") return `Position: ${body.topic}\n\nBackground:\n${body.context}`;
+  if (body.action === "selectionAsk") return `Selected content:\n${body.context}\n\nQuestion: ${body.question}`;
+  if (body.action === "selectionSummarize") return `Selected content:\n${body.context}`;
+  if (body.action === "analyzeDocument") return `Document${body.title ? ` titled "${body.title}"` : ""}:\n\n${body.text}`;
+  if (body.action === "documentChat") {
+    const history = body.history.map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`).join("\n");
+    return `Document${body.title ? ` titled "${body.title}"` : ""}:\n\n${body.documentText}\n\n${history ? `Conversation so far:\n${history}\n\n` : ""}User: ${body.message}`;
+  }
   const transcript = body.history.map((m) => `${m.role === "user" ? "User" : `AI (${m.stance || "debate"})`}: ${m.content}`).join("\n");
   return `Position debated: ${body.topic}\n\nTranscript:\n${transcript}`;
 }
@@ -202,6 +266,7 @@ function localFallback(body: Body) {
         { title: "What practical constraints shape this?", description: "Investigate practical, technical, or resource constraints that shape the answer." },
         { title: "Who is most affected, and how?", description: "Consider who is affected and how their incentives shape the outcome." },
       ],
+      sources: [] as SourceMetadata[],
     };
   }
   if (body.action === "chat") {
@@ -237,6 +302,26 @@ function localFallback(body: Body) {
       ],
     };
   }
+  if (body.action === "selectionAsk") {
+    return { reply: "No AI provider is configured, so this is a local placeholder. Add GEMINI_API_KEY or GROQ_API_KEY in .env.local to get a real answer about this selection." };
+  }
+  if (body.action === "selectionSummarize") {
+    return { reply: "No AI provider is configured, so this is a local placeholder. Add GEMINI_API_KEY or GROQ_API_KEY in .env.local to get a real summary of this selection." };
+  }
+  if (body.action === "analyzeDocument") {
+    return {
+      summary: "No AI provider is configured, so this is a local placeholder. Add GEMINI_API_KEY or GROQ_API_KEY in .env.local to get a real analysis of this document.",
+      keyFindings: [] as string[],
+      claims: [] as string[],
+      methodology: "",
+      limitations: [] as string[],
+      evidence: [] as string[],
+      openQuestions: [] as string[],
+    };
+  }
+  if (body.action === "documentChat") {
+    return { reply: "No AI provider is configured, so this is a local placeholder. Add GEMINI_API_KEY or GROQ_API_KEY in .env.local to ask real questions about this document." };
+  }
   return {
     currentPosition: "No AI provider is configured, so no real summary is available.",
     strengthenedBy: [],
@@ -255,6 +340,7 @@ function parseStructured(body: Body, text: string) {
   if (body.action === "synthesize") return synthesisSchema.parse(json);
   if (body.action === "debateCruxes") return cruxesSchema.parse(json);
   if (body.action === "debateSummarize") return debateSummarySchema.parse(json);
+  if (body.action === "analyzeDocument") return documentAnalysisSchema.parse(json);
   return challengeSchema.parse(json);
 }
 
@@ -322,8 +408,11 @@ export async function POST(request: Request) {
   const body = parsed.data;
   const { wantsJson } = instructionFor(body);
 
-  const sources = body.action === "chat" ? await retrieveSources(body.message) : [];
-  const groundedBody: Body = sources.length > 0 && body.action === "chat" ? { ...body, context: `${formatRetrievedSources(sources)}\n\n${body.context}` } : body;
+  const chatSources = body.action === "chat" ? await retrieveSources(body.message) : [];
+  const groundedBody: Body = chatSources.length > 0 && body.action === "chat" ? { ...body, context: `${formatRetrievedSources(chatSources)}\n\n${body.context}` } : body;
+  // Kicked off alongside the AI call (not used to ground the answer, just attached to the
+  // branch it belongs to) so the extra round-trip doesn't add latency on top of the model call.
+  const decomposeSourcesPromise = body.action === "decompose" ? retrieveSources(body.question) : null;
 
   const providers: (() => Promise<{ text: string; provider: "gemini" | "groq" }>)[] = [() => callGemini(groundedBody), () => callGroq(groundedBody)];
   let lastError: unknown = null;
@@ -334,12 +423,13 @@ export async function POST(request: Request) {
       if (!wantsJson) {
         return NextResponse.json({
           success: true,
-          data: { reply: sanitizeAiText(text), researched: sources.length > 0, sources: deepSanitize(sources) },
+          data: { reply: sanitizeAiText(text), researched: chatSources.length > 0, sources: deepSanitize(chatSources) },
           provider: name,
-          researched: sources.length > 0,
+          researched: chatSources.length > 0,
         });
       }
-      const data = deepSanitize(parseStructured(body, text));
+      const parsed = deepSanitize(parseStructured(body, text));
+      const data = decomposeSourcesPromise ? { ...parsed, sources: deepSanitize(await decomposeSourcesPromise) } : parsed;
       return NextResponse.json({ success: true, data, provider: name, researched: false });
     } catch (err) {
       lastError = err;

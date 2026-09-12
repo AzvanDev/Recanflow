@@ -13,17 +13,18 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { CircleHelp, Clipboard, Network, PanelLeft, Plus, Sparkles, Trash2, ZoomIn, ZoomOut } from "lucide-react";
+import { CircleHelp, Clipboard, Map as MapIcon, Network, PanelLeft, Plus, Sparkles, Trash2, X, ZoomIn, ZoomOut } from "lucide-react";
 
 import { createWorkspace, deleteWorkspace, listWorkspaces, loadWorkspace, newId, saveWorkspace, switchWorkspace, type WorkspaceSummary } from "@/lib/workspace";
-import { buildLineageContext } from "@/lib/context";
-import { layoutChildrenBelow, layoutChildOf, layoutBelowGroup, viewportCenterPosition } from "@/lib/layout";
+import { buildLineageContext, buildSelectionContext } from "@/lib/context";
+import { layoutChildrenBelow, layoutChildOf, layoutBelowGroup, layoutNextSiblingBelow, viewportCenterPosition } from "@/lib/layout";
 import { callAI } from "@/lib/ai-client";
 import { fetchRelatedVideos } from "@/lib/youtube-client";
-import type { ChatMessage, Confidence, DebateStance, FlowNode, FlowNodeData, NodeAction, NodeKind } from "@/lib/types";
+import type { ChatMessage, Confidence, DebateStance, FlowNode, FlowNodeData, NodeAction, NodeKind, ResearchItem } from "@/lib/types";
 import { useHistory } from "@/lib/history";
 
 import { QuestionNode } from "./nodes/QuestionNode";
+import { AnswerNode } from "./nodes/AnswerNode";
 import { BranchNode } from "./nodes/BranchNode";
 import { ResearchNode } from "./nodes/ResearchNode";
 import { FindingNode } from "./nodes/FindingNode";
@@ -31,14 +32,19 @@ import { InsightNode } from "./nodes/InsightNode";
 import { NoteNode } from "./nodes/NoteNode";
 import { TextNode } from "./nodes/TextNode";
 import { DebateNode } from "./nodes/DebateNode";
+import { ResultNode } from "./nodes/ResultNode";
+import { ResearchBranchNode } from "./nodes/ResearchBranchNode";
 import { TopLeftHeader, TopRightControls, ShareToast } from "./Header";
 import { Toolbar, type Tool } from "./Toolbar";
 import { EmptyState } from "./EmptyState";
 import { AIResearchPanel, type PanelActions } from "./AIResearchPanel";
 import { CommandPalette } from "./CommandPalette";
 import { OnboardingModal, HelpModal } from "./Modals";
+import { SelectionBar } from "./SelectionBar";
+import { TextFormatBar } from "./TextFormatBar";
+import { OpenResearchPortal } from "./OpenResearchPortal";
 
-const nodeTypes = { question: QuestionNode, branch: BranchNode, research: ResearchNode, finding: FindingNode, insight: InsightNode, note: NoteNode, text: TextNode, debate: DebateNode };
+const nodeTypes = { question: QuestionNode, answer: AnswerNode, branch: BranchNode, research: ResearchNode, finding: FindingNode, insight: InsightNode, note: NoteNode, text: TextNode, debate: DebateNode, result: ResultNode, researchBranch: ResearchBranchNode };
 
 function findAncestorOfKind(id: string, kind: NodeKind, nodes: FlowNode[], edges: Edge[]): FlowNode | undefined {
   const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -51,6 +57,24 @@ function findAncestorOfKind(id: string, kind: NodeKind, nodes: FlowNode[], edges
     cursor = parentId;
   }
   return undefined;
+}
+
+// Walks all the way up to the topmost Question in the chain (a nested branch can be many
+// Question→Answer hops deep) so secondary lookups like the YouTube query can disambiguate
+// generic terms against the overall research topic, not just the immediate follow-up text.
+function findRootQuestion(id: string, nodes: FlowNode[], edges: Edge[]): FlowNode | undefined {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  let cursor = id;
+  let root = byId.get(id);
+  for (let i = 0; i < 20; i++) {
+    const parentId = edges.find((e) => e.target === cursor)?.source;
+    if (!parentId) break;
+    const parent = byId.get(parentId);
+    if (!parent) break;
+    if (parent.data.kind === "question") root = parent;
+    cursor = parentId;
+  }
+  return root;
 }
 
 function summarize(text: string, max = 70) {
@@ -84,12 +108,16 @@ export function Workspace() {
   const [flow, setFlow] = useState<ReactFlowInstance<FlowNode> | null>(null);
   const [zoom, setZoom] = useState(100);
   const [sidebar, setSidebar] = useState(false);
+  const [minimapOpen, setMinimapOpen] = useState(true);
   const [search, setSearch] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [onboarding, setOnboarding] = useState(false);
   const [shareNotice, setShareNotice] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [synthesizing, setSynthesizing] = useState(false);
+  const [selectionBusy, setSelectionBusy] = useState(false);
+  const [openResearchAnswerId, setOpenResearchAnswerId] = useState<string | null>(null);
+  const [openResearchQuery, setOpenResearchQuery] = useState("");
 
   const { undo, redo, canUndo, canRedo } = useHistory(nodes, edges, setNodes, setEdges);
 
@@ -118,6 +146,7 @@ export function Workspace() {
   const selection = useMemo(() => selectedNodes.map((n) => n.id), [selectedNodes]);
   const canSaveFinding = selectedNodes.length === 1 && selectedNodes[0].data.kind === "research" && (selectedNodes[0].data.messages || []).some((m) => m.role === "assistant");
   const canSynthesize = selectedNodes.length >= 2 && selectedNodes.every((n) => n.data.kind === "finding");
+  const selectedText = selectedNodes.length === 1 && selectedNodes[0].data.kind === "text" ? selectedNodes[0] : null;
 
   // -- low-level mutation helpers, kept in sync with refs so chained calls within one handler never read stale state --
   const pushNodes = useCallback((newNodes: FlowNode[], newEdges: Edge[] = []) => {
@@ -179,44 +208,69 @@ export function Workspace() {
   }, [flow, pushNodes, selectOnly]);
 
   // -- AI-backed actions --
+  // Fetches once per node (research or answer) and caches on it (videosFetched) so repeat
+  // visits never re-query — real YouTube Data API results only, resolves to [] (never an
+  // error) if unavailable.
+  const fetchVideosFor = useCallback(async (nodeId: string, topic: string, context?: string) => {
+    const videos = await fetchRelatedVideos(topic, context);
+    patchNode(nodeId, { videos, videosFetched: true });
+  }, [patchNode]);
+
+  // Generates (or regenerates, on retry) the single Answer connected below a Question, with
+  // real Tavily sources attached to that same Answer (never shown until "Sources >" is
+  // clicked) and a YouTube lookup kicked off right after. The suggested follow-ups ride along
+  // as data on the Answer node itself — they are never their own canvas nodes until the user
+  // clicks one, at which point addFollowUp turns that click into a real, connected,
+  // auto-explored child Question with its own independent sources and videos.
   const explore = useCallback(async (questionId: string) => {
     const question = nodesRef.current.find((n) => n.id === questionId);
     if (!question || !question.data.title.trim()) return;
     patchNode(questionId, { status: "loading", error: undefined });
     try {
-      const { answer, branches } = await callAI({ action: "decompose", question: question.data.title });
-      const parent = nodesRef.current.find((n) => n.id === questionId)!;
-      const positions = layoutChildrenBelow(nodesRef.current, parent, "branch", branches.length);
-      const ids = branches.map(() => newId("branch"));
-      const newNodes: FlowNode[] = branches.map((b, i) => ({ id: ids[i], type: "branch", position: positions[i], data: { kind: "branch", title: b.title, description: b.description } }));
-      const newEdges: Edge[] = ids.map((bid) => ({ id: `e-${questionId}-${bid}`, source: questionId, target: bid, type: "smoothstep" }));
-      pushNodes(newNodes, newEdges);
+      const { answer, branches, sources } = await callAI({ action: "decompose", question: question.data.title });
+      const suggestions = branches.map((b) => ({ title: b.title, description: b.description }));
+      const existingAnswerEdge = edgesRef.current.find(
+        (e) => e.source === questionId && nodesRef.current.find((n) => n.id === e.target)?.data.kind === "answer",
+      );
+      const answerId = existingAnswerEdge ? existingAnswerEdge.target : newId("answer");
+      if (existingAnswerEdge) {
+        patchNode(answerId, { content: answer, suggestions, sources, status: "idle" });
+      } else {
+        const parent = nodesRef.current.find((n) => n.id === questionId)!;
+        const pos = layoutChildOf(nodesRef.current, parent, "answer");
+        pushNodes(
+          [{ id: answerId, type: "answer", position: pos, data: { kind: "answer", title: "Answer", content: answer, suggestions, sources, status: "idle" } }],
+          [{ id: `e-${questionId}-${answerId}`, source: questionId, target: answerId, type: "smoothstep" }],
+        );
+      }
       patchNode(questionId, { status: "idle", answer });
+      const rootQuestion = findRootQuestion(questionId, nodesRef.current, edgesRef.current);
+      fetchVideosFor(answerId, question.data.title, rootQuestion?.data.title);
       window.setTimeout(() => flow?.fitView({ padding: 0.25, duration: 350 }), 60);
     } catch (err) {
       patchNode(questionId, { status: "error", error: err instanceof Error ? err.message : "Could not generate an answer." });
     }
-  }, [patchNode, pushNodes, flow]);
+  }, [patchNode, pushNodes, flow, fetchVideosFor]);
 
-  const addFollowUp = useCallback((parentId: string, title: string) => {
+  // Turns a click — on a suggestion chip or the Answer's "+" composer — into a new child
+  // Question connected to that Answer, then immediately explores it, so suggested and
+  // manually-typed follow-ups behave identically once created. Multiple children can come
+  // from the same Answer; each new one fans out beside its earlier siblings instead of
+  // replacing them.
+  const addFollowUp = useCallback((answerId: string, title: string) => {
     if (!title.trim()) return;
-    const parent = nodesRef.current.find((n) => n.id === parentId);
+    const parent = nodesRef.current.find((n) => n.id === answerId);
     if (!parent) return;
-    const id = newId("branch");
-    const pos = layoutChildOf(nodesRef.current, parent, "branch");
+    const siblingIndex = edgesRef.current.filter((e) => e.source === answerId).length;
+    const pos = layoutNextSiblingBelow(nodesRef.current, parent, "question", siblingIndex);
+    const id = newId("question");
     pushNodes(
-      [{ id, type: "branch", position: pos, data: { kind: "branch", title: title.trim(), description: "" } }],
-      [{ id: `e-${parentId}-${id}`, source: parentId, target: id, type: "smoothstep" }],
+      [{ id, type: "question", position: pos, data: { kind: "question", title: title.trim(), status: "idle" } }],
+      [{ id: `e-${answerId}-${id}`, source: answerId, target: id, type: "smoothstep" }],
     );
-    setToast("Follow-up added to canvas");
-  }, [pushNodes]);
-
-  // Fetches once per research node and caches on it (videosFetched) so repeat visits never
-  // re-query — real YouTube Data API results only, resolves to [] (never an error) if unavailable.
-  const fetchVideosForResearch = useCallback(async (researchId: string, topic: string, context?: string) => {
-    const videos = await fetchRelatedVideos(topic, context);
-    patchNode(researchId, { videos, videosFetched: true });
-  }, [patchNode]);
+    window.setTimeout(() => flow?.fitView({ padding: 0.25, duration: 350 }), 60);
+    explore(id);
+  }, [pushNodes, flow, explore]);
 
   const openResearch = useCallback((id: string) => {
     const node = nodesRef.current.find((n) => n.id === id);
@@ -254,8 +308,8 @@ export function Workspace() {
       [{ id: `e-${id}-${researchId}`, source: id, target: researchId, type: "smoothstep" }],
     );
     selectOnly([researchId]);
-    fetchVideosForResearch(researchId, node.data.title, question?.data.title);
-  }, [pushNodes, selectOnly, fetchVideosForResearch]);
+    fetchVideosFor(researchId, node.data.title, question?.data.title);
+  }, [pushNodes, selectOnly, fetchVideosFor]);
 
   const sendChat = useCallback(async (researchId: string, message: string) => {
     const research = nodesRef.current.find((n) => n.id === researchId);
@@ -361,7 +415,10 @@ export function Workspace() {
     const debate = nodesRef.current.find((n) => n.id === debateId);
     if (!debate) return;
     const history: ChatMessage[] = debate.data.messages || [];
-    const context = `${buildLineageContext(debateId, nodesRef.current, edgesRef.current)}${debate.data.description ? `\n\n${debate.data.description}` : ""}`;
+    const sourcesBlock = debate.data.sources?.length
+      ? `\n\nAvailable sources (you may reference these if relevant; never invent others):\n${debate.data.sources.map((s) => `- ${s.title} (${s.domain}): ${s.snippet}`).join("\n")}`
+      : "";
+    const context = `${buildLineageContext(debateId, nodesRef.current, edgesRef.current)}${debate.data.description ? `\n\n${debate.data.description}` : ""}${sourcesBlock}`;
     const userMsg: ChatMessage | null = visibleUserMessage ? { id: newId("msg"), role: "user", content: visibleUserMessage } : null;
     patchNode(debateId, (d) => ({ status: "loading", error: undefined, messages: userMsg ? [...(d.messages || []), userMsg] : d.messages || [] }));
     try {
@@ -377,6 +434,30 @@ export function Workspace() {
       stance === "for" ? "Argue in favor of this position." : stance === "against" ? "Argue against this position." : "Give a balanced take, weighing both sides honestly.";
     sendDebateTurn(debateId, stance, prompt);
   }, [sendDebateTurn]);
+
+  // Debate entry point from the Answer panel: the user picks a position up front, so this
+  // creates the (single) Debate node connected to that Answer and immediately kicks off the
+  // opening argument via argueDebate — reusing the same turn-taking logic as every other debate
+  // entry point. Any real Sources already attached to the Answer ride along as grounding the AI
+  // may cite, never fabricate.
+  const startAnswerDebate = useCallback((answerId: string, stance: "for" | "against") => {
+    const answer = nodesRef.current.find((n) => n.id === answerId);
+    if (!answer) return;
+    const existingEdge = edgesRef.current.find((e) => e.source === answerId && nodesRef.current.find((n) => n.id === e.target)?.data.kind === "debate");
+    if (existingEdge) {
+      selectOnly([existingEdge.target]);
+      return;
+    }
+    const question = findAncestorOfKind(answerId, "question", nodesRef.current, edgesRef.current);
+    const id = newId("debate");
+    const pos = layoutChildOf(nodesRef.current, answer, "debate");
+    pushNodes(
+      [{ id, type: "debate", position: pos, data: { kind: "debate", title: question?.data.title || "Debate", messages: [], status: "idle", sources: answer.data.sources } }],
+      [{ id: `e-${answerId}-${id}`, source: answerId, target: id, type: "smoothstep" }],
+    );
+    selectOnly([id]);
+    argueDebate(id, stance);
+  }, [pushNodes, selectOnly, argueDebate]);
 
   const respondDebate = useCallback((debateId: string, text: string) => {
     const debate = nodesRef.current.find((n) => n.id === debateId);
@@ -420,10 +501,76 @@ export function Workspace() {
     createConnectedQuestion(debateId, question);
   }, [createConnectedQuestion]);
 
+  // Select + Ask AI / Summarize: scopes the AI call strictly to the currently-selected nodes'
+  // content (never the whole graph), then drops the answer as a new Result node connected to
+  // every selected node. No node is created if the request fails.
+  const runSelectionAI = useCallback(async (question?: string) => {
+    const selected = nodesRef.current.filter((n) => n.selected);
+    if (selected.length < 2) return;
+    setSelectionBusy(true);
+    try {
+      const context = buildSelectionContext(selected);
+      const { reply } = question
+        ? await callAI({ action: "selectionAsk", context, question })
+        : await callAI({ action: "selectionSummarize", context });
+      const resultId = newId("result");
+      const pos = layoutBelowGroup(nodesRef.current, selected, "result");
+      pushNodes(
+        [{ id: resultId, type: "result", position: pos, data: { kind: "result", title: question || "Summary", content: reply } }],
+        selected.map((n) => ({ id: `e-${n.id}-${resultId}`, source: n.id, target: resultId, type: "smoothstep" })),
+      );
+      selectOnly([resultId]);
+      window.setTimeout(() => flow?.fitView({ padding: 0.25, duration: 350 }), 60);
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Could not generate a result for this selection.");
+    } finally {
+      setSelectionBusy(false);
+    }
+  }, [pushNodes, selectOnly, flow]);
+
   const selectNode = useCallback((id: string) => {
     selectOnly([id]);
     flow?.fitView({ nodes: [{ id }], padding: 0.5, duration: 300, maxZoom: 1 });
   }, [flow, selectOnly]);
+
+  // -- Open Research portal --
+  // Opens scoped to one Answer: the portal starts its search from that Answer's own Question
+  // (never the whole workspace), and anything the user adds connects back to that same Answer.
+  const openOpenResearch = useCallback((answerId: string) => {
+    const question = findAncestorOfKind(answerId, "question", nodesRef.current, edgesRef.current);
+    setOpenResearchQuery(question?.data.title || "");
+    setOpenResearchAnswerId(answerId);
+    setPanelOpen(true);
+  }, []);
+
+  const closeOpenResearch = useCallback(() => setOpenResearchAnswerId(null), []);
+
+  // Adds one research item (a real search result or an identified upload) to the single
+  // Research Branch connected to this Answer — creating that branch on the first add, and
+  // simply appending to it on every add after, so multiple items never spawn multiple nodes.
+  const addResearchItem = useCallback((answerId: string, item: ResearchItem) => {
+    const answer = nodesRef.current.find((n) => n.id === answerId);
+    if (!answer) return;
+    const existingEdge = edgesRef.current.find(
+      (e) => e.source === answerId && nodesRef.current.find((n) => n.id === e.target)?.data.kind === "researchBranch",
+    );
+    if (existingEdge) {
+      patchNode(existingEdge.target, (d) => {
+        const items = d.researchItems || [];
+        if (items.some((existing) => existing.id === item.id)) return {};
+        return { researchItems: [...items, item] };
+      });
+      setToast("Added to research branch");
+      return;
+    }
+    const id = newId("researchBranch");
+    const pos = layoutChildOf(nodesRef.current, answer, "researchBranch");
+    pushNodes(
+      [{ id, type: "researchBranch", position: pos, data: { kind: "researchBranch", title: "Research", researchItems: [item] } }],
+      [{ id: `e-${answerId}-${id}`, source: answerId, target: id, type: "smoothstep" }],
+    );
+    setToast("Research branch created");
+  }, [pushNodes, patchNode]);
 
   const handleAction = useCallback((action: NodeAction, id: string, payload?: unknown) => {
     if (action === "editTitle") patchNode(id, { title: String(payload ?? "") });
@@ -433,7 +580,16 @@ export function Workspace() {
     else if (action === "challenge") challenge(id);
     else if (action === "createQuestionFromChallenge") createQuestionFromChallenge(id);
     else if (action === "openDebate") selectOnly([id]);
-  }, [patchNode, explore, openResearch, challenge, createQuestionFromChallenge, selectOnly]);
+    else if (action === "addFollowUp") addFollowUp(id, String(payload ?? ""));
+    else if (action === "respondDebate") respondDebate(id, String(payload ?? ""));
+    else if (action === "formatText") patchNode(id, (payload as Partial<FlowNodeData>) || {});
+    else if (action === "resizeText") patchNode(id, { width: Number(payload) });
+    else if (action === "selectSuggestion") {
+      const idx = typeof payload === "number" ? payload : -1;
+      const suggestion = nodesRef.current.find((n) => n.id === id)?.data.suggestions?.[idx];
+      if (suggestion) addFollowUp(id, suggestion.title);
+    }
+  }, [patchNode, explore, openResearch, challenge, createQuestionFromChallenge, selectOnly, addFollowUp, respondDebate]);
 
   const panelActions: PanelActions = useMemo(() => ({
     explore,
@@ -445,14 +601,16 @@ export function Workspace() {
     createQuestionFromChallenge,
     addFollowUp,
     startDebate,
+    startAnswerDebate,
     argueDebate,
     respondDebate,
     getCruxes,
     summarizeDebate,
     exploreUnresolved,
     selectNode,
+    openOpenResearch,
     startQuestion: () => addQuestion(),
-  }), [explore, openResearch, sendChat, saveFinding, synthesize, challenge, createQuestionFromChallenge, addFollowUp, startDebate, argueDebate, respondDebate, getCruxes, summarizeDebate, exploreUnresolved, selectNode, addQuestion]);
+  }), [explore, openResearch, sendChat, saveFinding, synthesize, challenge, createQuestionFromChallenge, addFollowUp, startDebate, startAnswerDebate, argueDebate, respondDebate, getCruxes, summarizeDebate, exploreUnresolved, selectNode, openOpenResearch, addQuestion]);
 
   const onConnect = useCallback((connection: Connection) => {
     setEdges((es) => addEdge({ ...connection, type: "smoothstep" }, es));
@@ -552,6 +710,7 @@ export function Workspace() {
         deleteSelected();
       } else if (e.key.toLowerCase() === "v") setTool("select");
       else if (e.key.toLowerCase() === "h") setTool("hand");
+      else if (e.key.toLowerCase() === "t") setTool("text");
       else if (e.key.toLowerCase() === "q") addQuestion();
       else if (e.key.toLowerCase() === "n") addNote();
       else if (e.key.toLowerCase() === "r") runResearchTool();
@@ -577,7 +736,7 @@ export function Workspace() {
   const effectiveTool: Tool = spaceHeld ? "hand" : tool;
 
   return (
-    <main className="workspace">
+    <main className={`workspace ${effectiveTool === "text" ? "tool-text" : ""}`}>
       <ReactFlow<FlowNode>
         nodes={renderNodes}
         edges={edges}
@@ -587,12 +746,21 @@ export function Workspace() {
         onConnect={onConnect}
         onInit={setFlow}
         onMove={(_, viewport) => setZoom(Math.round(viewport.zoom * 100))}
+        onPaneClick={(event) => {
+          if (effectiveTool !== "text" || !flow) return;
+          const pos = flow.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+          addText(pos);
+          setTool("select");
+        }}
         onSelectionChange={({ nodes: ns }) => {
           const next = ns.map((n) => n.id);
           const prev = lastSelectionRef.current;
           const changed = next.length !== prev.length || next.some((id, i) => id !== prev[i]);
           lastSelectionRef.current = next;
-          if (changed && next.length) setPanelOpen(true);
+          if (changed && next.length) {
+            setPanelOpen(true);
+            setOpenResearchAnswerId(null);
+          }
         }}
         fitView
         fitViewOptions={{ padding: 0.3 }}
@@ -602,11 +770,21 @@ export function Workspace() {
         defaultEdgeOptions={{ type: "smoothstep" }}
       >
         <Background gap={22} size={1} color="#e9e7ef" />
-        <MiniMap pannable zoomable className="minimap" />
+        {minimapOpen && <MiniMap pannable zoomable className="minimap" />}
         <Controls showInteractive={false} className="flow-controls" />
       </ReactFlow>
 
       {nodes.length === 0 && <EmptyState onStart={(question) => { const id = addQuestion(undefined, question); explore(id); }} />}
+
+      {minimapOpen ? (
+        <button className="minimap-close floating" aria-label="Hide minimap" title="Hide minimap" onClick={() => setMinimapOpen(false)}>
+          <X size={11} />
+        </button>
+      ) : (
+        <button className="minimap-reopen floating" aria-label="Show minimap" title="Show minimap" onClick={() => setMinimapOpen(true)}>
+          <MapIcon size={16} />
+        </button>
+      )}
 
       <TopLeftHeader workspaceName={workspaceName} onRename={setWorkspaceName} onToggleSidebar={() => setSidebar((v) => !v)} />
       <TopRightControls onOpenPanel={() => setPanelOpen(true)} onShare={shareWorkspace} />
@@ -647,13 +825,26 @@ export function Workspace() {
         </aside>
       )}
 
-      <AIResearchPanel selected={selectedNodes} nodes={nodes} edges={edges} open={panelOpen} onClose={() => setPanelOpen(false)} actions={panelActions} synthesizing={synthesizing} />
-      {!panelOpen && (
+      {openResearchAnswerId ? (
+        <OpenResearchPortal
+          defaultQuery={openResearchQuery}
+          onClose={closeOpenResearch}
+          onAdd={(item) => addResearchItem(openResearchAnswerId, item)}
+        />
+      ) : (
+        <AIResearchPanel selected={selectedNodes} nodes={nodes} edges={edges} open={panelOpen} onClose={() => setPanelOpen(false)} actions={panelActions} synthesizing={synthesizing} />
+      )}
+      {!panelOpen && !openResearchAnswerId && (
         <button className="ai-launcher floating" onClick={() => setPanelOpen(true)} aria-label="Open AI panel">
           <Sparkles size={18} />
           <span>AI</span>
         </button>
       )}
+
+      {selectedNodes.length >= 2 && (
+        <SelectionBar busy={selectionBusy} onAsk={(question) => runSelectionAI(question)} onSummarize={() => runSelectionAI()} />
+      )}
+      {selectedText && <TextFormatBar node={selectedText} onFormat={(partial) => patchNode(selectedText.id, partial)} />}
 
       <Toolbar
         tool={effectiveTool}
@@ -665,7 +856,6 @@ export function Workspace() {
         canSaveFinding={canSaveFinding}
         onSynthesize={runSynthesize}
         canSynthesize={canSynthesize}
-        onCreateText={() => addText()}
         onUndo={undo}
         onRedo={redo}
         canUndo={canUndo}

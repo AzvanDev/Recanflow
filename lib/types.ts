@@ -1,6 +1,6 @@
 import type { Edge, Node } from "@xyflow/react";
 
-export type NodeKind = "question" | "branch" | "research" | "finding" | "insight" | "note" | "text" | "debate";
+export type NodeKind = "question" | "answer" | "branch" | "research" | "finding" | "insight" | "note" | "text" | "debate" | "result" | "researchBranch";
 export type NodeStatus = "idle" | "loading" | "error";
 export type Confidence = "high" | "medium" | "low";
 export type DebateStance = "for" | "against" | "balanced" | "challenge" | "respond";
@@ -12,6 +12,40 @@ export type ResearchSource = { id: string; title: string; url: string; domain: s
 export type VideoMetadata = { videoId: string; title: string; thumbnail: string; channelTitle: string; publishedAt: string; url: string };
 
 export type Provenance = { questionId?: string; questionTitle?: string; branchId?: string; branchTitle?: string; researchId?: string };
+
+/** A real result from an academic/research index (e.g. OpenAlex) — never model-generated. */
+export type PaperResult = {
+  id: string;
+  title: string;
+  authors: string[];
+  institution?: string;
+  year?: string;
+  sourceType: string;
+  abstract?: string;
+  url: string;
+  openAccessUrl?: string;
+};
+
+export type DocumentAnalysis = {
+  summary: string;
+  keyFindings: string[];
+  claims: string[];
+  methodology: string;
+  limitations: string[];
+  evidence: string[];
+  openQuestions: string[];
+};
+
+/** One item inside a Research Branch — either a real search result or an identified upload. Never fabricated. */
+export type ResearchItem = {
+  id: string;
+  title: string;
+  institution?: string;
+  year?: string;
+  sourceType?: string;
+  url?: string;
+  uploaded?: boolean;
+};
 
 export type ChallengeResult = {
   weaknesses: string[];
@@ -41,7 +75,12 @@ export type NodeAction =
   | "createQuestionFromChallenge"
   | "openDebate"
   | "editContent"
-  | "editTitle";
+  | "editTitle"
+  | "selectSuggestion"
+  | "addFollowUp"
+  | "respondDebate"
+  | "formatText"
+  | "resizeText";
 
 export type FlowNodeData = {
   kind: NodeKind;
@@ -51,6 +90,7 @@ export type FlowNodeData = {
   status?: NodeStatus;
   error?: string;
   answer?: string;
+  suggestions?: { title: string; description?: string }[];
   messages?: ChatMessage[];
   keyPoints?: string[];
   supportingEvidence?: string[];
@@ -62,6 +102,14 @@ export type FlowNodeData = {
   videosFetched?: boolean;
   challenge?: ChallengeResult;
   debateSummary?: DebateSummary;
+  textLevel?: "heading" | "subheading" | "body";
+  textSize?: "small" | "medium" | "large";
+  bold?: boolean;
+  italic?: boolean;
+  align?: "left" | "center" | "right";
+  textColor?: string;
+  width?: number;
+  researchItems?: ResearchItem[];
   onAction?: (action: NodeAction, id: string, payload?: unknown) => void;
 };
 

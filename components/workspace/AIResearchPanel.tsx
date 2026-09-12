@@ -1,7 +1,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import type { Edge } from "@xyflow/react";
-import { ArrowRight, Bookmark, ChevronRight, ExternalLink, HelpCircle, ListChecks, Plus, RotateCcw, Scale, Send, ShieldQuestion, Sparkles, Swords, Telescope, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bookmark, BookOpen, ChevronRight, ExternalLink, HelpCircle, ListChecks, Plus, RotateCcw, Scale, Send, ShieldQuestion, Sparkles, Swords, Telescope, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import type { DebateStance, FlowNode, ResearchSource, VideoMetadata } from "@/lib/types";
 import { KIND_LABEL } from "./nodes/shared";
 
@@ -15,12 +15,14 @@ export type PanelActions = {
   createQuestionFromChallenge: (insightId: string) => void;
   addFollowUp: (parentId: string, title: string) => void;
   startDebate: (sourceId: string) => void;
+  startAnswerDebate: (answerId: string, stance: "for" | "against") => void;
   argueDebate: (debateId: string, stance: "for" | "against" | "balanced") => void;
   respondDebate: (debateId: string, text: string) => void;
   getCruxes: (debateId: string) => void;
   summarizeDebate: (debateId: string) => void;
   exploreUnresolved: (debateId: string, question: string) => void;
   selectNode: (id: string) => void;
+  openOpenResearch: (answerId: string) => void;
   startQuestion: () => void;
 };
 
@@ -116,39 +118,104 @@ function MultiSelectView({ selected, actions }: { selected: FlowNode[]; actions:
 function SingleNodeView({ node, nodes, edges, actions }: { node: FlowNode; nodes: FlowNode[]; edges: Edge[]; actions: PanelActions }) {
   const { data } = node;
   if (data.kind === "question") {
-    const followUps = edges
+    const answerNode = edges
       .filter((e) => e.source === node.id)
       .map((e) => nodes.find((n) => n.id === e.target))
-      .filter((n): n is FlowNode => !!n && n.data.kind === "branch");
+      .find((n): n is FlowNode => !!n && n.data.kind === "answer");
     return (
       <>
         {!data.answer && <p>{data.title || "Give this question some text, then explore it with AI."}</p>}
         {data.status === "error" && <ErrorBanner message={data.error} onRetry={() => actions.explore(node.id)} />}
-        {data.answer && (
-          <>
-            <span className="eyebrow">ANSWER</span>
-            <p>{data.answer}</p>
-          </>
-        )}
         {!data.answer && (
           <button className="primary wide" disabled={!data.title.trim() || data.status === "loading"} onClick={() => actions.explore(node.id)}>
             {data.status === "loading" ? "Thinking…" : "Explore with AI"} {data.status !== "loading" && <ArrowRight size={15} />}
           </button>
         )}
-        {followUps.length > 0 && (
+        {answerNode && (
+          <button className="followup-chip" onClick={() => actions.selectNode(answerNode.id)}>
+            <span>View answer</span>
+            <ChevronRight size={14} />
+          </button>
+        )}
+      </>
+    );
+  }
+
+  if (data.kind === "answer") {
+    const children = edges
+      .filter((e) => e.source === node.id)
+      .map((e) => nodes.find((n) => n.id === e.target))
+      .filter((n): n is FlowNode => !!n && n.data.kind === "question");
+    const debateNode = edges
+      .filter((e) => e.source === node.id)
+      .map((e) => nodes.find((n) => n.id === e.target))
+      .find((n): n is FlowNode => !!n && n.data.kind === "debate");
+    const debateStance = debateNode?.data.messages?.[0]?.stance;
+    const researchBranch = edges
+      .filter((e) => e.source === node.id)
+      .map((e) => nodes.find((n) => n.id === e.target))
+      .find((n): n is FlowNode => !!n && n.data.kind === "researchBranch");
+    return (
+      <>
+        <span className="eyebrow">ANSWER</span>
+        <p>{data.content}</p>
+        {data.suggestions && data.suggestions.length > 0 && (
           <>
-            <span className="eyebrow">FOLLOW-UP QUESTIONS</span>
+            <span className="eyebrow">SUGGESTED FOLLOW-UPS</span>
             <div className="followup-list">
-              {followUps.map((f) => (
-                <button key={f.id} className="followup-chip" onClick={() => actions.openResearch(f.id)}>
-                  <span>{f.data.title}</span>
+              {data.suggestions.map((s, i) => (
+                <button key={i} className="followup-chip" onClick={() => actions.addFollowUp(node.id, s.title)}>
+                  <span>{s.title}</span>
                   <ChevronRight size={14} />
                 </button>
               ))}
             </div>
           </>
         )}
-        {data.answer && <FollowUpComposer onSubmit={(text) => actions.addFollowUp(node.id, text)} />}
+        {children.length > 0 && (
+          <>
+            <span className="eyebrow">BRANCHES</span>
+            <div className="followup-list">
+              {children.map((c) => (
+                <button key={c.id} className="followup-chip" onClick={() => actions.selectNode(c.id)}>
+                  <span>{c.data.title}</span>
+                  <ChevronRight size={14} />
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+        <FollowUpComposer onSubmit={(text) => actions.addFollowUp(node.id, text)} />
+        {data.sources && data.sources.length > 0 && <SourcesList sources={data.sources} />}
+        {data.videos && data.videos.length > 0 && <RelatedVideos videos={data.videos} />}
+
+        <span className="eyebrow">OPEN RESEARCH</span>
+        {researchBranch && (
+          <button className="followup-chip" onClick={() => actions.selectNode(researchBranch.id)}>
+            <span>View research ({(researchBranch.data.researchItems || []).length})</span>
+            <ChevronRight size={14} />
+          </button>
+        )}
+        <button className="node-action" onClick={() => actions.openOpenResearch(node.id)}>
+          <BookOpen size={13} /> {researchBranch ? "Add more research" : "Open Research"}
+        </button>
+
+        <span className="eyebrow">DEBATE</span>
+        {debateNode ? (
+          <button className="followup-chip" onClick={() => actions.selectNode(debateNode.id)}>
+            <span>Continue debate{debateStance === "for" ? " (For)" : debateStance === "against" ? " (Against)" : ""}</span>
+            <ChevronRight size={14} />
+          </button>
+        ) : (
+          <div className="panel-quick-actions">
+            <button className="node-action" onClick={() => actions.startAnswerDebate(node.id, "for")}>
+              <ThumbsUp size={13} /> Argue For
+            </button>
+            <button className="node-action" onClick={() => actions.startAnswerDebate(node.id, "against")}>
+              <ThumbsDown size={13} /> Argue Against
+            </button>
+          </div>
+        )}
       </>
     );
   }
@@ -185,7 +252,35 @@ function SingleNodeView({ node, nodes, edges, actions }: { node: FlowNode; nodes
 
   if (data.kind === "insight") return <InsightView node={node} actions={actions} />;
 
-  if (data.kind === "debate") return <DebateView node={node} actions={actions} />;
+  if (data.kind === "debate") return <DebateView node={node} nodes={nodes} edges={edges} actions={actions} />;
+
+  if (data.kind === "researchBranch") {
+    const items = data.researchItems || [];
+    return (
+      <>
+        <span className="eyebrow">RESEARCH</span>
+        {items.length === 0 && <p>No research items yet.</p>}
+        <div className="research-results">
+          {items.map((item) => {
+            const meta = [item.institution, item.year, item.sourceType].filter(Boolean).join(" · ");
+            return (
+              <div key={item.id} className="research-result-card">
+                <span className="research-result-title">{item.title}</span>
+                {meta && <p className="research-result-meta">{meta}</p>}
+                {item.url && (
+                  <div className="research-result-actions">
+                    <a className="node-action" href={item.url} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink size={12} /> Open original
+                    </a>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </>
+    );
+  }
 
   return <p>{data.content || "Edit this note directly on the canvas."}</p>;
 }
@@ -393,7 +488,7 @@ function stanceLabel(role: "user" | "assistant", stance?: DebateStance) {
   return "AI";
 }
 
-function DebateView({ node, actions }: { node: FlowNode; actions: PanelActions }) {
+function DebateView({ node, nodes, edges, actions }: { node: FlowNode; nodes: FlowNode[]; edges: Edge[]; actions: PanelActions }) {
   const [draft, setDraft] = useState("");
   // Tracks whichever debate action last ran, so the error banner's Retry re-attempts the
   // thing that actually failed (arguing a stance, sending a reply, cruxes, or summarize).
@@ -402,6 +497,8 @@ function DebateView({ node, actions }: { node: FlowNode; actions: PanelActions }
   const messages = data.messages || [];
   const busy = data.status === "loading";
   const hasExchanges = messages.length > 0;
+  const parentId = edges.find((e) => e.target === node.id)?.source;
+  const parent = nodes.find((n) => n.id === parentId);
 
   function send() {
     if (!draft.trim() || busy) return;
@@ -428,6 +525,11 @@ function DebateView({ node, actions }: { node: FlowNode; actions: PanelActions }
 
   return (
     <>
+      {parent && (
+        <button className="node-action back-to-answer" onClick={() => actions.selectNode(parent.id)}>
+          <ArrowLeft size={13} /> Back to {parent.data.kind === "answer" ? "answer" : "source"}
+        </button>
+      )}
       <p>{data.description || "State your view, or ask the AI to argue a side, to begin."}</p>
       <div className="panel-quick-actions">
         <button className="node-action" disabled={busy} onClick={() => argue("for")}>

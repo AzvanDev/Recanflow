@@ -1,10 +1,11 @@
 import { useEffect, type ReactNode, type RefObject } from "react";
 import { Handle, Position } from "@xyflow/react";
-import { FileText, GitBranch, Lightbulb, Sparkles, Swords, Telescope, Type as TypeIcon } from "lucide-react";
+import { BookOpen, FileText, GitBranch, Lightbulb, MessageCircle, Sparkles, Swords, Telescope, Type as TypeIcon, Wand2 } from "lucide-react";
 import type { NodeKind, NodeStatus } from "@/lib/types";
 
 export const KIND_LABEL: Record<NodeKind, string> = {
   question: "Question",
+  answer: "Answer",
   branch: "Follow-up",
   research: "Research",
   finding: "Finding",
@@ -12,10 +13,13 @@ export const KIND_LABEL: Record<NodeKind, string> = {
   note: "Note",
   text: "Text",
   debate: "Debate",
+  result: "AI Result",
+  researchBranch: "Research Branch",
 };
 
 export const KIND_ICON: Record<NodeKind, typeof Sparkles> = {
   question: Sparkles,
+  answer: MessageCircle,
   branch: GitBranch,
   research: Telescope,
   finding: FileText,
@@ -23,6 +27,8 @@ export const KIND_ICON: Record<NodeKind, typeof Sparkles> = {
   note: FileText,
   text: TypeIcon,
   debate: Swords,
+  result: Wand2,
+  researchBranch: BookOpen,
 };
 
 /**

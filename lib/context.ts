@@ -22,3 +22,25 @@ export function buildFindingsContext(findings: FlowNode[]) {
     .join("\n\n")
     .slice(0, 12000);
 }
+
+/** Describes only the selected nodes' most relevant content (kind-specific), never the whole graph — used to scope Select + Ask AI / Summarize to exactly what the user picked. */
+export function buildSelectionContext(nodes: FlowNode[]): string {
+  return nodes
+    .map((n) => {
+      const label = n.data.title?.trim() || n.data.kind;
+      let body: string;
+      if (n.data.kind === "question") body = n.data.answer || "(not yet explored)";
+      else if (n.data.kind === "research") {
+        const lastReply = [...(n.data.messages || [])].reverse().find((m) => m.role === "assistant");
+        body = [n.data.description, lastReply?.content].filter(Boolean).join("\n");
+      } else if (n.data.kind === "insight") {
+        body = [n.data.description, ...(n.data.keyPoints || [])].filter(Boolean).join("\n");
+      } else {
+        body = n.data.content || n.data.description || "";
+      }
+      return `${n.data.kind.toUpperCase()}: ${label}\n${body}`.trim();
+    })
+    .filter(Boolean)
+    .join("\n\n")
+    .slice(0, 8000);
+}
