@@ -200,13 +200,6 @@ export function Workspace() {
     setFocusNodeId(id);
   }, [flow, pushNodes, selectOnly]);
 
-  const addStandaloneResearch = useCallback(() => {
-    const id = newId("research");
-    const pos = viewportCenterPosition(flow, "research");
-    pushNodes([{ id, type: "research", position: pos, data: { kind: "research", title: "", description: "Define what to research, then ask a question.", status: "idle", messages: [], findingIds: [] } }]);
-    selectOnly([id]);
-  }, [flow, pushNodes, selectOnly]);
-
   // -- AI-backed actions --
   // Fetches once per node (research or answer) and caches on it (videosFetched) so repeat
   // visits never re-query — real YouTube Data API results only, resolves to [] (never an
@@ -679,9 +672,30 @@ export function Workspace() {
     else setToast("Select at least 2 findings to create an insight.");
   };
 
+  // Toolbar's "New research" now opens the same Open Research portal as the Answer panel's
+  // button, scoped to whichever Answer is reachable from the current selection — it no longer
+  // creates a standalone legacy research-chat node.
   const runResearchTool = () => {
-    if (selectedNodes.length === 1 && (selectedNodes[0].data.kind === "branch" || selectedNodes[0].data.kind === "research")) openResearch(selectedNodes[0].id);
-    else addStandaloneResearch();
+    if (selectedNodes.length === 1) {
+      const node = selectedNodes[0];
+      if (node.data.kind === "answer") {
+        openOpenResearch(node.id);
+        return;
+      }
+      if (node.data.kind === "question") {
+        const answer = edgesRef.current
+          .filter((e) => e.source === node.id)
+          .map((e) => nodesRef.current.find((n) => n.id === e.target))
+          .find((n): n is FlowNode => !!n && n.data.kind === "answer");
+        if (answer) {
+          openOpenResearch(answer.id);
+        } else {
+          setToast("Explore this question first, then open research for its answer.");
+        }
+        return;
+      }
+    }
+    setToast("Select a Question or its Answer to open research for it.");
   };
 
   // -- keyboard shortcuts --
