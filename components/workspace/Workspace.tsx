@@ -19,7 +19,7 @@ import { CircleHelp, Clipboard, Map as MapIcon, Minimize2, Network, PanelLeft, P
 
 import { createWorkspace, deleteWorkspace, listWorkspaces, loadWorkspace, newId, saveWorkspace, switchWorkspace, type WorkspaceSummary } from "@/lib/workspace";
 import { buildLineageContext, buildSelectionContext } from "@/lib/context";
-import { layoutChildrenBelow, layoutChildOf, layoutBelowGroup, layoutFamilyRow, viewportCenterPosition } from "@/lib/layout";
+import { layoutChildrenBelow, layoutChildOf, layoutBelowGroup, layoutFamilyRow, viewportCenterPosition, placeClear, NODE_SIZE } from "@/lib/layout";
 import { callAI } from "@/lib/ai-client";
 import { fetchRelatedVideos } from "@/lib/youtube-client";
 import type { ChatMessage, Confidence, DebateStance, FlowNode, FlowNodeData, NodeAction, NodeKind, ResearchItem } from "@/lib/types";
@@ -216,9 +216,17 @@ export function Workspace() {
   const exitFocus = useCallback(() => setFocusedIds(null), []);
 
   // -- node creation --
+  // When no explicit position is given (toolbar button / keyboard shortcut, as opposed to a
+  // deliberate canvas click), the candidate spot is just the current viewport center — with a
+  // tall Answer already on screen, that center can sit right on top of it. Route it through the
+  // same collision-avoidance every other layout call uses so a brand-new top-level branch never
+  // lands on existing content; an explicit position (a genuine click) is respected as-is.
   const addQuestion = useCallback((position?: { x: number; y: number }, title = "") => {
     const id = newId("question");
-    const pos = position || viewportCenterPosition(flow, "question");
+    const pos = position || (() => {
+      const center = viewportCenterPosition(flow, "question");
+      return placeClear(nodesRef.current, NODE_SIZE.question, center.x, center.y);
+    })();
     pushNodes([{ id, type: "question", position: pos, data: { kind: "question", title, status: "idle" } }]);
     selectOnly([id]);
     setFocusNodeId(id);
@@ -227,7 +235,10 @@ export function Workspace() {
 
   const addNote = useCallback((position?: { x: number; y: number }) => {
     const id = newId("note");
-    const pos = position || viewportCenterPosition(flow, "note");
+    const pos = position || (() => {
+      const center = viewportCenterPosition(flow, "note");
+      return placeClear(nodesRef.current, NODE_SIZE.note, center.x, center.y);
+    })();
     pushNodes([{ id, type: "note", position: pos, data: { kind: "note", title: "Note", content: "" } }]);
     selectOnly([id]);
     setFocusNodeId(id);
