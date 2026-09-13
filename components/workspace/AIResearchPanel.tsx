@@ -408,7 +408,10 @@ function ResearchChat({ node, actions }: { node: FlowNode; actions: PanelActions
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             e.stopPropagation();
-            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") send(draft);
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              send(draft);
+            }
           }}
           placeholder="Ask about this research…"
         />
@@ -571,7 +574,10 @@ function DebateView({ node, nodes, edges, actions }: { node: FlowNode; nodes: Fl
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             e.stopPropagation();
-            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") send();
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              send();
+            }
           }}
           placeholder="State your position or respond…"
         />

@@ -115,6 +115,8 @@ export type FlowNodeData = {
   dimmed?: boolean;
   /** True once the user has manually dragged this node — local auto-layout then leaves it alone and treats it as an obstacle instead of repositioning it. */
   movedByUser?: boolean;
+  /** Render-only: true for the Answer whose content was just produced by the current explore() call, so it types in instead of appearing instantly. Never persisted. */
+  justGenerated?: boolean;
 };
 
 export type FlowNode = Node<FlowNodeData>;

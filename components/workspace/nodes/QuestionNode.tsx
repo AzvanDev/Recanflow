@@ -21,7 +21,15 @@ export function QuestionNode({ id, data, selected }: Props) {
         placeholder="What do you want to understand?"
         rows={2}
         onChange={(e) => data.onAction?.("editTitle", id, e.target.value)}
-        onKeyDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            if (data.status !== "error" && !data.answer && data.title.trim() && !loading) {
+              data.onAction?.("explore", id);
+            }
+          }
+        }}
       />
       {data.status === "error" && <p className="node-error">{data.error || "Something went wrong."}</p>}
       <div className="node-footer">

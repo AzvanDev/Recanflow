@@ -16,7 +16,10 @@ export function EmptyState({ onStart }: { onStart: (question: string) => void })
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => {
-              if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && value.trim()) onStart(value.trim());
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                if (value.trim()) onStart(value.trim());
+              }
             }}
           />
           <button className="primary wide" disabled={!value.trim()} onClick={() => value.trim() && onStart(value.trim())}>

@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { Node, NodeProps } from "@xyflow/react";
 import { ChevronDown, ChevronRight, ExternalLink, Plus } from "lucide-react";
 import type { FlowNodeData } from "@/lib/types";
-import { NodeShell } from "./shared";
+import { NodeShell, useRevealText } from "./shared";
 
 export function AnswerNode({ id, data, selected }: NodeProps<Node<FlowNodeData>>) {
   const [composing, setComposing] = useState(false);
@@ -11,6 +11,7 @@ export function AnswerNode({ id, data, selected }: NodeProps<Node<FlowNodeData>>
   const sources = data.sources || [];
   const videos = data.videos || [];
   const hasMaterial = sources.length > 0 || videos.length > 0;
+  const revealedContent = useRevealText(data.content || "", !!data.justGenerated);
 
   function submit() {
     if (!draft.trim()) return;
@@ -21,14 +22,15 @@ export function AnswerNode({ id, data, selected }: NodeProps<Node<FlowNodeData>>
 
   return (
     <NodeShell kind="answer" selected={selected} dimmed={data.dimmed}>
-      <p className="node-answer-preview">{data.content}</p>
+      <p className="node-answer-preview">{revealedContent}</p>
 
       {data.suggestions && data.suggestions.length > 0 && (
         <div className="followup-list">
           {data.suggestions.map((s, i) => (
             <button
               key={i}
-              className="followup-chip nodrag"
+              className={`followup-chip nodrag ${data.justGenerated ? "reveal" : ""}`}
+              style={data.justGenerated ? { animationDelay: `${380 + i * 70}ms` } : undefined}
               onClick={(e) => {
                 e.stopPropagation();
                 data.onAction?.("selectSuggestion", id, i);

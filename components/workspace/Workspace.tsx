@@ -5,6 +5,7 @@ import {
   Background,
   Controls,
   MiniMap,
+  PanOnScrollMode,
   ReactFlow,
   useEdgesState,
   useNodesState,
@@ -107,6 +108,7 @@ export function Workspace() {
   const [spaceHeld, setSpaceHeld] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
+  const [justGeneratedId, setJustGeneratedId] = useState<string | null>(null);
   const [flow, setFlow] = useState<ReactFlowInstance<FlowNode> | null>(null);
   const [zoom, setZoom] = useState(100);
   const [sidebar, setSidebar] = useState(false);
@@ -291,6 +293,7 @@ export function Workspace() {
       patchNode(questionId, { status: "idle", answer });
       const rootQuestion = findRootQuestion(questionId, nodesRef.current, edgesRef.current);
       fetchVideosFor(answerId, question.data.title, rootQuestion?.data.title);
+      setJustGeneratedId(answerId);
       if (!existingAnswerEdge) focusOn([questionId, answerId]);
     } catch (err) {
       patchNode(questionId, { status: "error", error: err instanceof Error ? err.message : "Could not generate an answer." });
@@ -803,8 +806,8 @@ export function Workspace() {
   });
 
   const renderNodes = useMemo(
-    () => nodes.map((n) => ({ ...n, data: { ...n.data, onAction: handleAction, autoFocus: n.id === focusNodeId, dimmed: focusedIds ? !focusedIds.has(n.id) : false } })),
-    [nodes, handleAction, focusNodeId, focusedIds],
+    () => nodes.map((n) => ({ ...n, data: { ...n.data, onAction: handleAction, autoFocus: n.id === focusNodeId, dimmed: focusedIds ? !focusedIds.has(n.id) : false, justGenerated: n.id === justGeneratedId } })),
+    [nodes, handleAction, focusNodeId, focusedIds, justGeneratedId],
   );
 
   const effectiveTool: Tool = spaceHeld ? "hand" : tool;
@@ -839,8 +842,14 @@ export function Workspace() {
         fitView
         fitViewOptions={{ padding: 0.3 }}
         selectionOnDrag={effectiveTool === "select"}
-        panOnDrag={effectiveTool === "hand" || spaceHeld}
-        multiSelectionKeyCode="Shift"
+        panOnDrag={effectiveTool === "hand" || spaceHeld ? true : [1]}
+        panOnScroll
+        panOnScrollMode={PanOnScrollMode.Free}
+        zoomOnScroll={false}
+        zoomOnPinch
+        multiSelectionKeyCode={["Shift", "Meta", "Control"]}
+        nodeDragThreshold={4}
+        nodeClickDistance={4}
         defaultEdgeOptions={{ type: "default" }}
       >
         <Background gap={22} size={1} color="#e9e7ef" />

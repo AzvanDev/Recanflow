@@ -42,7 +42,7 @@ export function DebateNode({ id, data, selected }: NodeProps<Node<FlowNodeData>>
         </>
       ) : (
         <>
-          <div className="debate-thread nodrag">
+          <div className="debate-thread nodrag nowheel">
             {messages.map((m) => (
               <div key={m.id} className={`debate-msg ${m.role}`}>
                 <span className="debate-msg-role">{m.role === "user" ? "You" : "AI"}</span>

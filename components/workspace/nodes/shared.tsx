@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode, type RefObject } from "react";
+import { useEffect, useState, type ReactNode, type RefObject } from "react";
 import { Handle, Position } from "@xyflow/react";
 import { BookOpen, FileText, GitBranch, Lightbulb, MessageCircle, Sparkles, Swords, Telescope, Type as TypeIcon, Wand2 } from "lucide-react";
 import type { NodeKind, NodeStatus } from "@/lib/types";
@@ -51,6 +51,33 @@ export function useAutoFocus(ref: RefObject<HTMLTextAreaElement | null>, autoFoc
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+}
+
+/**
+ * Reveals `text` over a fixed total duration regardless of length, so a long answer doesn't
+ * feel slow and a short one doesn't feel skipped. Only animates when `animate` is true (gated
+ * by the caller on a "this content was just generated" flag) — re-renders of an already-shown
+ * answer, and content restored on page load, render instantly since the effect only re-runs
+ * when `text` itself changes.
+ */
+export function useRevealText(text: string, animate: boolean, duration = 450) {
+  const [shown, setShown] = useState(() => (animate ? "" : text));
+  useEffect(() => {
+    if (!animate) {
+      setShown(text);
+      return;
+    }
+    let raf: number;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - start) / duration);
+      setShown(text.slice(0, Math.ceil(text.length * progress)));
+      if (progress < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [text, animate, duration]);
+  return shown;
 }
 
 export function StatusBadge({ status }: { status?: NodeStatus }) {
