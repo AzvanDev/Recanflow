@@ -158,7 +158,6 @@ kbd { font-size: 10px; background: #f4f1f6; border-radius: 5px; padding: 3px 5px
 .research-result-meta { font-size: 11px; color: #8c8498; margin: 0 0 8px; }
 .research-result-actions { display: flex; gap: 8px; }
 
-.canvas-node.researchBranch { border-color: #c3ddf0; }
 .research-branch-items { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
 .research-branch-item-title { font-size: 12px; font-weight: 500; color: #3c3743; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .research-branch-more { font-size: 11px; color: #8c8498; margin-top: 1px; }
@@ -166,8 +165,8 @@ kbd { font-size: 10px; background: #f4f1f6; border-radius: 5px; padding: 3px 5px
 /* canvas nodes */
 .canvas-node { width: 268px; min-height: 130px; border-radius: 14px; border: 1px solid #dfdbe4; background: rgba(255,255,255,.98); box-shadow: 0 7px 18px rgba(43,33,61,.08); padding: 14px 14px 11px; position: relative; display: flex; flex-direction: column; gap: 2px; }
 .canvas-node.selected { border-color: #7657ea; box-shadow: 0 0 0 2px rgba(118,87,234,.16), 0 7px 18px rgba(43,33,61,.08); }
-.canvas-node.question { width: 340px; border-color: #bdb0f4; background: #fdfcff; }
-.canvas-node.answer { width: 320px; border-color: #b9d6f4; background: #f8fbff; }
+.canvas-node.question { width: 340px; }
+.canvas-node.answer { width: 320px; }
 .canvas-node.answer .followup-list { margin-top: 6px; margin-bottom: 0; }
 .canvas-node.answer .followup-chip p, .canvas-node.answer .followup-chip span { -webkit-line-clamp: unset; }
 .answer-footer { display: flex; justify-content: center; margin-top: 12px; }
@@ -186,11 +185,29 @@ kbd { font-size: 10px; background: #f4f1f6; border-radius: 5px; padding: 3px 5px
 .quick-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; -webkit-line-clamp: unset; }
 .quick-link svg { color: #a89fc0; flex-shrink: 0; }
 .sources-empty { font-size: 11px; color: #938b9d; margin: 2px 0 0; }
-.canvas-node.insight { width: 300px; border-color: #f0d9a8; background: #fffdf7; }
-.canvas-node.branch { border-color: #cdd7f4; }
-.canvas-node.finding { border-color: #c7e6d3; }
-.canvas-node.debate { width: 300px; border-color: #f0c2c2; }
-.canvas-node.result { border-color: #d8c9f9; background: #fbf9ff; }
+.canvas-node.insight { width: 300px; }
+.canvas-node.debate { width: 300px; }
+
+/* Node-kind color notation — a very light background + a soft accent border/icon per kind, so
+   a node's type reads at a glance without touching content text (always dark, unaffected here).
+   The same kind always gets the same family everywhere it appears on the canvas. */
+.canvas-node.question, .canvas-node.branch { background: #faf8ff; border-color: #ded2f7; }
+.canvas-node.question .node-kicker svg, .canvas-node.branch .node-kicker svg { color: #7859d6; }
+
+.canvas-node.answer { background: #f6faff; border-color: #c6def6; }
+.canvas-node.answer .node-kicker svg { color: #3e7fc4; }
+
+.canvas-node.research, .canvas-node.researchBranch, .canvas-node.finding { background: #f6fbf8; border-color: #c7e6d2; }
+.canvas-node.research .node-kicker svg, .canvas-node.researchBranch .node-kicker svg, .canvas-node.finding .node-kicker svg { color: #3e8f5f; }
+
+.canvas-node.note { background: #fffdf5; border-color: #efe1b0; }
+.canvas-node.note .node-kicker svg { color: #9c7a1e; }
+
+.canvas-node.debate { background: #fff9f3; border-color: #f2d7b8; }
+.canvas-node.debate .node-kicker svg { color: #b4661c; }
+
+.canvas-node.result, .canvas-node.insight { background: #fbfafe; border-color: #e3d6f3; }
+.canvas-node.result .node-kicker svg, .canvas-node.insight .node-kicker svg { color: #9368ce; }
 .debate-stance { display: inline-block; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; padding: 2px 7px; border-radius: 999px; margin: 2px 0 6px; }
 .debate-stance.for { background: #eaf6ee; color: #2f7a49; }
 .debate-stance.against { background: #fdeeee; color: #a03d3d; }
