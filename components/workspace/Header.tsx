@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ChevronDown, Clipboard, Grip, PanelRight, Share2 } from "lucide-react";
+import { ChevronDown, Clipboard, Grip, Moon, PanelRight, Share2, Sun } from "lucide-react";
+import type { Theme } from "@/lib/theme";
 
 export function TopLeftHeader({
   workspaceName,
@@ -58,9 +59,27 @@ export function TopLeftHeader({
   );
 }
 
-export function TopRightControls({ onOpenPanel, onShare }: { onOpenPanel: () => void; onShare: () => void }) {
+export function TopRightControls({
+  onOpenPanel,
+  onShare,
+  theme,
+  onToggleTheme,
+}: {
+  onOpenPanel: () => void;
+  onShare: () => void;
+  theme: Theme;
+  onToggleTheme: () => void;
+}) {
   return (
     <div className="floating top-right">
+      <button
+        className="theme-toggle"
+        aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+        title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+        onClick={onToggleTheme}
+      >
+        {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+      </button>
       <button className="ai-status" aria-label="Open AI panel" title="Open AI panel" onClick={onOpenPanel}>
         <PanelRight size={16} />
       </button>

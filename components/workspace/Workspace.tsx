@@ -19,6 +19,7 @@ import "@xyflow/react/dist/style.css";
 import { CircleHelp, Clipboard, Map as MapIcon, Minimize2, Network, PanelLeft, Plus, Sparkles, Trash2, X, ZoomIn, ZoomOut } from "lucide-react";
 
 import { createWorkspace, deleteWorkspace, listWorkspaces, loadWorkspace, newId, saveWorkspace, switchWorkspace, type WorkspaceSummary } from "@/lib/workspace";
+import { loadTheme, saveTheme, type Theme } from "@/lib/theme";
 import { buildLineageContext, buildSelectionContext } from "@/lib/context";
 import { layoutChildrenBelow, layoutChildOf, layoutBelowGroup, layoutFamilyRow, viewportCenterPosition, placeClear, NODE_SIZE } from "@/lib/layout";
 import { callAI } from "@/lib/ai-client";
@@ -123,11 +124,20 @@ export function Workspace() {
   const [openResearchAnswerId, setOpenResearchAnswerId] = useState<string | null>(null);
   const [openResearchQuery, setOpenResearchQuery] = useState("");
   const [focusedIds, setFocusedIds] = useState<Set<string> | null>(null);
+  const [theme, setTheme] = useState<Theme>(() => (typeof window !== "undefined" ? loadTheme() : "light"));
 
   const { undo, redo, canUndo, canRedo } = useHistory(nodes, edges, setNodes, setEdges);
 
   useEffect(() => {
     if (typeof window !== "undefined" && !localStorage.getItem("recan-onboarded")) setOnboarding(true);
+  }, []);
+
+  useEffect(() => {
+    saveTheme(theme);
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((t) => (t === "dark" ? "light" : "dark"));
   }, []);
 
   useEffect(() => {
@@ -815,6 +825,7 @@ export function Workspace() {
   return (
     <main className={`workspace ${effectiveTool === "text" ? "tool-text" : ""}`}>
       <ReactFlow<FlowNode>
+        colorMode={theme}
         nodes={renderNodes}
         edges={edges}
         nodeTypes={nodeTypes}
@@ -876,7 +887,7 @@ export function Workspace() {
       )}
 
       <TopLeftHeader workspaceName={workspaceName} onRename={setWorkspaceName} onToggleSidebar={() => setSidebar((v) => !v)} />
-      <TopRightControls onOpenPanel={() => setPanelOpen(true)} onShare={shareWorkspace} />
+      <TopRightControls onOpenPanel={() => setPanelOpen(true)} onShare={shareWorkspace} theme={theme} onToggleTheme={toggleTheme} />
       <button className="nav-toggle floating" onClick={() => setSidebar((v) => !v)} aria-label="Toggle navigation">
         <PanelLeft size={18} />
       </button>
