@@ -357,30 +357,41 @@ kbd { font-size: 10px; background: var(--bg-neutral); border-radius: 5px; paddin
 .text-bare .node-editable-text { font-weight: 500; color: var(--text-1); }
 
 /* z-index raised above the default .floating (10) so this bar — and any popover anchored to
-   it — reliably paints above the bottom toolbar (also z-index 10) regardless of DOM order. */
-.text-format-bar { left: 50%; bottom: 85px; transform: translateX(-50%); z-index: 15; display: flex; align-items: center; gap: 4px; padding: 6px; animation: panel-in .15s ease-out; }
-.text-format-label { display: flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: var(--text-3); padding: 0 4px 0 6px; white-space: nowrap; }
-.text-format-bar i { height: 22px; width: 1px; background: var(--border-2); }
-.text-format-bar button { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 6px; color: var(--accent-strong); flex-shrink: 0; }
-.text-format-bar button:hover, .text-format-bar button.active { background: var(--bg-hover-accent); color: var(--accent-hover); }
+   it — reliably paints above the bottom toolbar (also z-index 10) regardless of DOM order.
+   Groups (label / level / B-I-align / size / color) are spaced generously via the bar's own
+   gap, with a subtle "i" divider between each; within the B/I/Align group the gap tightens so
+   that trio reads as one connected cluster — this is what gives the bar its Figma-style
+   breathing room instead of everything crowding together at a uniform tight spacing. */
+.text-format-bar { left: 50%; bottom: 85px; transform: translateX(-50%); z-index: 15; display: flex; align-items: center; gap: 8px; padding: 7px 10px; animation: panel-in .15s ease-out; }
+.text-format-label { display: flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: var(--text-3); white-space: nowrap; }
+.text-format-bar i { height: 20px; width: 1px; background: var(--border-2); flex-shrink: 0; }
+/* Scoped to .format-button-group specifically (not the broader .text-format-bar) — a bare
+   ".text-format-bar button" selector would out-specificity the dropdown trigger's and color
+   swatch's own sizing rules below (class+type beats a single class), forcibly squashing
+   "Heading"/"Medium" down to a clipped 28px square and turning the round swatch into one too. */
+.format-button-group { display: flex; align-items: center; gap: 2px; }
+.format-button-group button { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; color: var(--accent-strong); flex-shrink: 0; }
+.format-button-group button:hover, .format-button-group button.active { background: var(--bg-hover-accent); color: var(--accent-hover); }
 
 /* Custom Small/Medium/Large + Heading/Subheading/Body dropdowns, replacing the native <select>.
-   The bar is docked just above the bottom toolbar, so menus open upward — there's essentially
-   never room below without overlapping the toolbar. */
+   Controlled by the parent so only one popover in the bar is ever open at once — see
+   TextFormatBar.tsx. The bar is docked just above the bottom toolbar, so menus open upward —
+   there's essentially never room below without overlapping the toolbar. */
 .format-dropdown { position: relative; }
-.format-dropdown-trigger { display: flex; align-items: center; gap: 4px; height: 26px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--border-1); background: var(--bg-elevated); color: var(--text-2); font-size: 11px; white-space: nowrap; }
+.format-dropdown-trigger { display: flex; align-items: center; gap: 5px; height: 28px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--border-1); background: var(--bg-elevated); color: var(--text-2); font-size: 11px; white-space: nowrap; }
 .format-dropdown-trigger:hover, .format-dropdown-trigger.open { border-color: var(--accent-soft-border); background: var(--bg-hover-accent); color: var(--accent-strong); }
 .format-dropdown-trigger svg { color: var(--text-3); flex-shrink: 0; transition: transform .15s ease; }
 .format-dropdown-trigger.open svg { transform: rotate(180deg); color: var(--accent-strong); }
-.format-dropdown-menu { position: absolute; bottom: calc(100% + 6px); left: 0; min-width: 112px; display: flex; flex-direction: column; gap: 1px; padding: 4px; background: var(--bg-elevated); border: 1px solid var(--border-1); border-radius: 9px; box-shadow: var(--shadow-md); z-index: 1; animation: dropdown-in .12s ease-out; }
-.format-dropdown-item { display: block; width: 100%; text-align: left; padding: 6px 8px; border-radius: 6px; font-size: 11.5px; color: var(--text-1); }
+.format-dropdown-menu { position: absolute; bottom: calc(100% + 8px); left: 0; min-width: 118px; display: flex; flex-direction: column; gap: 1px; padding: 4px; background: var(--bg-elevated); border: 1px solid var(--border-1); border-radius: 9px; box-shadow: var(--shadow-md); z-index: 1; animation: dropdown-in .12s ease-out; }
+.format-dropdown-item { display: block; width: 100%; text-align: left; padding: 6px 9px; border-radius: 6px; font-size: 11.5px; color: var(--text-1); }
 .format-dropdown-item:hover { background: var(--bg-hover-accent); color: var(--accent-strong); }
 .format-dropdown-item.active { background: var(--accent-soft-bg); color: var(--accent-strong); font-weight: 500; }
 @keyframes dropdown-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 
-.text-color-picker { position: relative; }
+.text-color-picker { position: relative; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 7px; }
+.text-color-picker:hover { background: var(--bg-hover-accent); }
 .text-color-swatch { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--border-1); }
-.text-color-options { position: absolute; bottom: calc(100% + 6px); left: 0; display: flex; gap: 4px; padding: 5px; background: var(--bg-elevated); border: 1px solid var(--border-1); border-radius: 8px; box-shadow: var(--shadow-md); z-index: 1; animation: dropdown-in .12s ease-out; }
+.text-color-options { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); display: flex; gap: 4px; padding: 5px; background: var(--bg-elevated); border: 1px solid var(--border-1); border-radius: 8px; box-shadow: var(--shadow-md); z-index: 1; animation: dropdown-in .12s ease-out; }
 .text-resize-handle { position: absolute; top: 4px; bottom: 4px; right: -5px; width: 9px; cursor: ew-resize; }
 .text-resize-handle::after { content: ""; position: absolute; top: 50%; right: 2px; transform: translateY(-50%); width: 3px; height: 22px; border-radius: 2px; background: transparent; }
 .text-bare:hover .text-resize-handle::after, .text-bare.selected .text-resize-handle::after { background: var(--accent-soft-border); }
