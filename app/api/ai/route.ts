@@ -415,7 +415,7 @@ export async function POST(request: Request) {
   const decomposeSourcesPromise = body.action === "decompose" ? retrieveSources(body.question) : null;
 
   const providers: (() => Promise<{ text: string; provider: "gemini" | "groq" }>)[] = [() => callGemini(groundedBody), () => callGroq(groundedBody)];
-  let lastError: unknown = null;
+  const errors: unknown[] = [];
 
   for (const provider of providers) {
     try {
@@ -432,7 +432,7 @@ export async function POST(request: Request) {
       const data = decomposeSourcesPromise ? { ...parsed, sources: deepSanitize(await decomposeSourcesPromise) } : parsed;
       return NextResponse.json({ success: true, data, provider: name, researched: false });
     } catch (err) {
-      lastError = err;
+      errors.push(err);
     }
   }
 
@@ -441,6 +441,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, data: localFallback(body), provider: "local", researched: false });
   }
 
-  console.error("AI providers failed", lastError);
+  // Logging every provider's own failure (not just the last one) is what makes a "both
+  // providers failed" 502 actually debuggable — a single lastError silently discarded which
+  // provider failed first and why, and this exact case (a stale hardcoded model id 404ing)
+  // has already happened once in this repo.
+  console.error("AI providers failed", errors);
   return NextResponse.json({ success: false, error: "The AI provider is temporarily unavailable. Please try again." }, { status: 502 });
 }
