@@ -59,7 +59,6 @@ export function AdminShell({ children }: { children: ReactNode }) {
           <button className="admin-menu-toggle" onClick={() => setSidebarOpen((v) => !v)} aria-label="Toggle navigation">
             <Menu size={16} />
           </button>
-          <span className="admin-prototype-badge">Prototype · synthetic demo data, not real production metrics</span>
           <div className="admin-topbar-spacer" />
           <button className="admin-theme-toggle" onClick={toggleTheme} aria-label={theme === "light" ? "Switch to dark theme" : "Switch to light theme"} title={theme === "light" ? "Switch to dark theme" : "Switch to light theme"}>
             {theme === "light" ? <Moon size={16} /> : <Sun size={16} />}
