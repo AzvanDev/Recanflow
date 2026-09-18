@@ -1,0 +1,141 @@
+/* ReCan Flow — Admin Panel. Purely additive: every color here is one of the existing
+   tokens from app/globals.css (plus the four --chart-cat-* tokens added there for the
+   provider-usage chart), so dark mode and the theme toggle work with zero extra plumbing.
+   Imported only by app/admin/layout.tsx — scoped to the /admin route tree. */
+
+.admin-shell {
+  display: flex;
+  min-height: 100vh;
+  background: var(--bg-canvas);
+  background-image: radial-gradient(var(--grid-dot) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+.admin-sidebar {
+  width: 226px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 12px;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-1);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+.admin-brand { display: flex; align-items: center; gap: 8px; padding: 8px 8px 18px; }
+.admin-logo { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; color: #fff; background: var(--accent); flex-shrink: 0; }
+.admin-brand b { font-size: 13px; color: var(--text-1); }
+.admin-badge { margin-left: auto; font-size: 10px; font-weight: 600; color: var(--accent-strong); background: var(--accent-soft-bg); padding: 3px 7px; border-radius: 6px; }
+
+.admin-nav { display: flex; flex-direction: column; gap: 2px; }
+.admin-nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 9px; color: var(--text-2); font-size: 12.5px; font-weight: 500; text-decoration: none; transition: background-color .15s ease, color .15s ease; }
+.admin-nav-item:hover { background: var(--bg-hover); color: var(--text-1); }
+.admin-nav-item.active { background: var(--accent-soft-bg); color: var(--accent-strong); }
+
+.admin-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.admin-topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px; padding: 12px 24px; background: var(--bg-surface); border-bottom: 1px solid var(--border-1); }
+.admin-menu-toggle { display: none; padding: 6px; border-radius: 8px; color: var(--text-2); }
+.admin-menu-toggle:hover { background: var(--bg-hover); }
+.admin-prototype-badge { font-size: 11px; font-weight: 500; color: var(--warning-text); background: var(--warning-bg); padding: 4px 10px; border-radius: 7px; }
+.admin-topbar-spacer { flex: 1; }
+.admin-theme-toggle { padding: 7px; border-radius: 8px; color: var(--text-2); }
+.admin-theme-toggle:hover { background: var(--bg-hover-accent); color: var(--accent-strong); }
+
+.admin-content { flex: 1; padding: 24px 28px 48px; max-width: 1320px; width: 100%; margin: 0 auto; }
+.admin-page-title { font-size: 19px; font-weight: 600; color: var(--text-1); margin: 0 0 4px; }
+.admin-page-subtitle { font-size: 12.5px; color: var(--text-3); margin: 0 0 22px; }
+
+.admin-card { background: var(--bg-elevated); border: 1px solid var(--border-1); border-radius: 14px; box-shadow: var(--shadow-card); padding: 18px 20px; }
+.admin-card-title { font-size: 12.5px; font-weight: 600; color: var(--text-1); margin: 0 0 2px; }
+.admin-card-subtitle { font-size: 11px; color: var(--text-3); margin: 0 0 14px; }
+.admin-section { margin-bottom: 26px; }
+.admin-section-title { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); margin: 0 0 12px; }
+
+.admin-grid { display: grid; gap: 16px; }
+.admin-grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+.admin-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+
+/* KPI / stat tiles */
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+.stat-tile { background: var(--bg-elevated); border: 1px solid var(--border-1); border-radius: 14px; box-shadow: var(--shadow-card); padding: 15px 17px; display: flex; flex-direction: column; gap: 9px; }
+.stat-tile-label { font-size: 11.5px; color: var(--text-3); font-weight: 500; }
+.stat-tile-value { font-size: 22px; font-weight: 600; color: var(--text-1); }
+.stat-tile-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.stat-tile-delta { display: inline-flex; align-items: center; gap: 2px; font-size: 11.5px; font-weight: 600; }
+
+/* small multiples */
+.mini-trend-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.mini-trend-card { background: var(--bg-elevated); border: 1px solid var(--border-1); border-radius: 12px; padding: 13px 15px; display: flex; flex-direction: column; gap: 6px; }
+.mini-trend-label { font-size: 11px; color: var(--text-3); }
+.mini-trend-value { font-size: 17px; font-weight: 600; color: var(--text-1); }
+
+.sparkline { display: block; }
+
+/* charts */
+.chart-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.range-toggle { display: inline-flex; background: var(--bg-neutral); border-radius: 8px; padding: 2px; gap: 2px; }
+.range-toggle button { padding: 5px 10px; border-radius: 6px; font-size: 11px; font-weight: 500; color: var(--text-3); }
+.range-toggle button.active { background: var(--bg-elevated); color: var(--accent-strong); box-shadow: var(--shadow-sm); }
+
+.line-chart { position: relative; }
+.line-chart svg { display: block; cursor: crosshair; }
+.line-chart-tooltip { position: absolute; top: 4px; transform: translateX(-50%); background: var(--bg-elevated); border: 1px solid var(--border-1); border-radius: 8px; padding: 6px 10px; box-shadow: var(--shadow-md); pointer-events: none; white-space: nowrap; }
+.line-chart-tooltip-value { font-size: 12.5px; font-weight: 700; color: var(--text-1); }
+.line-chart-tooltip-date { font-size: 10px; color: var(--text-3); }
+
+.bar-chart.vertical { display: block; }
+.bar-chart-bar { transition: opacity .1s ease; cursor: default; }
+.bar-chart-bar:hover { opacity: .8; }
+
+.bar-chart.horizontal { display: flex; flex-direction: column; gap: 11px; }
+.bar-chart-row { display: grid; grid-template-columns: 132px 1fr 56px; align-items: center; gap: 10px; }
+.bar-chart-row-label { font-size: 12px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-chart-row-track { height: 10px; background: var(--bg-neutral); border-radius: 0 6px 6px 0; overflow: hidden; }
+.bar-chart-row-fill { height: 100%; border-radius: 0 6px 6px 0; transition: opacity .1s ease; }
+.bar-chart-row-fill:hover { opacity: .82; }
+.bar-chart-row-value { font-size: 11.5px; color: var(--text-3); text-align: right; font-variant-numeric: tabular-nums; }
+
+/* status */
+.status-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 4px 9px; border-radius: 7px; white-space: nowrap; }
+
+.meter { display: flex; flex-direction: column; gap: 6px; }
+.meter-label { font-size: 11.5px; color: var(--text-2); }
+.meter-track { height: 8px; background: var(--accent-soft-bg); border-radius: 5px; overflow: hidden; }
+.meter-fill { height: 100%; background: var(--accent); border-radius: 5px; transition: width .3s ease; }
+.meter-value { font-size: 11px; color: var(--text-3); align-self: flex-end; }
+
+/* table */
+.data-table-wrap { overflow-x: auto; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.data-table th { text-align: left; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); padding: 0 12px 10px; border-bottom: 1px solid var(--border-1); white-space: nowrap; }
+.data-table td { padding: 11px 12px; border-bottom: 1px solid var(--border-2); color: var(--text-2); white-space: nowrap; }
+.data-table tr:last-child td { border-bottom: none; }
+
+/* system health / provider rows */
+.health-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
+.health-card { background: var(--bg-elevated); border: 1px solid var(--border-1); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.health-card-name { font-size: 12.5px; font-weight: 600; color: var(--text-1); }
+.health-card-detail { font-size: 11px; color: var(--text-3); }
+
+.provider-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border-2); }
+.provider-row:last-child { border-bottom: none; }
+.provider-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.provider-name { font-size: 12.5px; color: var(--text-1); font-weight: 500; min-width: 76px; }
+
+.settings-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border-2); }
+.settings-row:last-child { border-bottom: none; }
+.settings-row-name { font-size: 12.5px; color: var(--text-1); font-weight: 500; }
+.settings-row-env { font-size: 10.5px; color: var(--text-3); font-family: monospace; margin-top: 2px; }
+
+@media (max-width: 880px) {
+  .admin-sidebar { position: fixed; left: 0; top: 0; z-index: 20; transform: translateX(-100%); transition: transform .2s ease; box-shadow: var(--shadow-lg); }
+  .admin-sidebar.open { transform: translateX(0); }
+  .admin-menu-toggle { display: flex; }
+  .admin-content { padding: 18px 14px 40px; }
+  .admin-grid.cols-2, .admin-grid.cols-3 { grid-template-columns: 1fr; }
+  .bar-chart-row { grid-template-columns: 96px 1fr 48px; }
+  .admin-prototype-badge { display: none; }
+}

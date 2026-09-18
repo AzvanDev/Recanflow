@@ -51,6 +51,9 @@
   --node-note-bg: #fffdf5; --node-note-border: #efe1b0; --node-note-icon: #9c7a1e;
   --node-debate-bg: #fff9f3; --node-debate-border: #f2d7b8; --node-debate-icon: #b4661c;
   --node-result-bg: #fbfafe; --node-result-border: #e3d6f3; --node-result-icon: #9368ce;
+
+  /* admin dashboard: categorical chart series (provider usage) — validated CVD-safe order */
+  --chart-cat-1: #2a78d6; --chart-cat-2: #eb6834; --chart-cat-3: #1baf7a; --chart-cat-4: #eda100;
 }
 
 /* Dark theme — carefully chosen dark neutrals, not an inversion. Applied via a data-theme
@@ -100,6 +103,8 @@
   --node-note-bg: #2e2718; --node-note-border: #524321; --node-note-icon: #e0bb5c;
   --node-debate-bg: #322418; --node-debate-border: #573f24; --node-debate-icon: #eb9c56;
   --node-result-bg: #291f36; --node-result-border: #4a3a63; --node-result-icon: #c9a3ef;
+
+  --chart-cat-1: #3987e5; --chart-cat-2: #d95926; --chart-cat-3: #199e70; --chart-cat-4: #c98500;
 }
 
 * { box-sizing: border-box; }
