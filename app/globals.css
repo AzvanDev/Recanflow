@@ -115,6 +115,19 @@ button { border: 0; background: none; color: inherit; cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .5; }
 kbd { font-size: 10px; background: var(--bg-neutral); border-radius: 5px; padding: 3px 5px; }
 
+/* Custom scrollbars — one narrow, rounded, theme-aware system for every scroll container in
+   the app (right panels, debate threads, dropdowns, tables, textareas, canvas nodes, …), via a
+   universal selector so nothing needs its own copy and any future scrollable element inherits
+   it automatically. Reuses existing tokens (no new ones) so light/dark already just work. Pure
+   cosmetic styling only — scrollbar-width/-color and ::-webkit-scrollbar* affect appearance
+   only, never wheel/trackpad input handling. */
+* { scrollbar-width: thin; scrollbar-color: var(--text-3) var(--bg-neutral); }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: var(--bg-neutral); }
+*::-webkit-scrollbar-thumb { background-color: var(--text-3); border-radius: 8px; }
+*::-webkit-scrollbar-thumb:hover { background-color: var(--text-2); }
+*::-webkit-scrollbar-corner { background: var(--bg-neutral); }
+
 .workspace { height: 100vh; overflow: hidden; background-image: radial-gradient(var(--grid-dot) 1px, transparent 1px); background-size: 22px 22px; background-color: var(--bg-canvas); position: relative; transition: background-color .2s ease; }
 .react-flow { background: transparent; }
 .react-flow__attribution { display: none; }
@@ -171,7 +184,7 @@ kbd { font-size: 10px; background: var(--bg-neutral); border-radius: 5px; paddin
 .sidebar button:hover, .side-active { background: var(--accent-soft-bg) !important; color: var(--accent-strong); }
 .side-spacer { flex: 1; }
 .sidebar .new-workspace { background: var(--accent); color: white; justify-content: center; }
-.workspace-list { max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; }
+.workspace-list { max-height: 200px; overflow-y: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; }
 .workspace-row { display: flex; align-items: center; border-radius: 8px; }
 .workspace-row.side-active { background: var(--accent-soft-bg); color: var(--accent-strong); }
 .workspace-row-main { flex: 1; min-width: 0; padding: 9px 8px !important; display: flex !important; align-items: center; gap: 9px; background: none !important; }
@@ -187,7 +200,7 @@ kbd { font-size: 10px; background: var(--bg-neutral); border-radius: 5px; paddin
 .panel-header > button { width: 28px; height: 28px; border-radius: 8px; color: var(--text-3); }
 .panel-header > button:hover { background: var(--bg-hover-accent); color: var(--accent-strong); }
 .panel-toolbar { flex: none; padding-top: 14px; }
-.panel-body { flex: 1; min-height: 0; overflow-y: auto; padding-top: 20px; }
+.panel-body { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; padding-top: 20px; }
 .panel-body p { line-height: 1.65; color: var(--text-2); margin: 0 0 16px; }
 .panel-body .eyebrow { display: block; margin: 0 0 8px; }
 .panel-body .eyebrow:not(:first-child) { margin-top: 4px; }
@@ -319,7 +332,7 @@ kbd { font-size: 10px; background: var(--bg-neutral); border-radius: 5px; paddin
 .debate-stance { display: inline-block; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; padding: 2px 7px; border-radius: 999px; margin: 2px 0 6px; }
 .debate-stance.for { background: var(--success-bg); color: var(--success-text); }
 .debate-stance.against { background: var(--error-bg); color: var(--error-text); }
-.debate-thread { display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; margin: 4px 0 8px; }
+.debate-thread { display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; scrollbar-gutter: stable; margin: 4px 0 8px; }
 .debate-msg p { font-size: 11.5px; line-height: 1.45; color: var(--text-1); margin: 0; -webkit-line-clamp: unset; }
 .debate-msg-role { display: block; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-placeholder); margin-bottom: 2px; }
 .debate-msg.user .debate-msg-role { color: var(--accent); }
@@ -439,7 +452,7 @@ kbd { font-size: 10px; background: var(--bg-neutral); border-radius: 5px; paddin
 .modal-shade { position: fixed; z-index: 30; inset: 0; background: rgba(35,28,46,.16); display: grid; place-items: center; backdrop-filter: blur(2px); }
 .command { width: min(560px, calc(100vw - 32px)); background: var(--bg-elevated); border: 1px solid var(--border-1); border-radius: 15px; box-shadow: var(--shadow-lg); padding: 13px; display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
 .command input { border: 0; outline: 0; flex: 1; font-size: 15px; padding: 7px; background: transparent; color: var(--text-1); }
-.results { width: 100%; border-top: 1px solid var(--border-2); padding-top: 8px; max-height: 290px; overflow: auto; }
+.results { width: 100%; border-top: 1px solid var(--border-2); padding-top: 8px; max-height: 290px; overflow: auto; scrollbar-gutter: stable; }
 .results button { width: 100%; display: flex; gap: 10px; align-items: center; text-align: left; padding: 8px; border-radius: 8px; }
 .results button:hover { background: var(--bg-hover); }
 .result-icon { background: var(--accent-soft-bg); color: var(--accent-hover); border-radius: 6px; width: 25px; height: 25px; display: grid; place-items: center; flex-shrink: 0; }

@@ -24,6 +24,7 @@
   top: 0;
   height: 100vh;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 .admin-brand { display: flex; align-items: center; gap: 8px; padding: 8px 8px 18px; }
 .admin-logo { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; color: #fff; background: var(--accent); flex-shrink: 0; }
