@@ -136,8 +136,6 @@ const USAGE: Record<UsageKey, { stat: StatMetric; mini: MiniMetric }> = {
 const activeTrend14Raw = buildDailySeries(rng, 14, { base: activeToday * 0.9, trendPerDay: activeToday * 0.01, noise: 0.12, weekendFactor: 0.85 });
 
 const KPI_TOTAL_USERS = statFromPeriods("Total Users", TOTAL_USERS, TOTAL_USERS - newUsersThisPeriod, series(29, newSignupsDaily.slice(-30)));
-const KPI_ACTIVE_USERS = statFromPeriods("Active Users", activeMonth, Math.round(activeMonth * rng.float(0.88, 0.97)), series(13, activeTrend14Raw));
-const KPI_NEW_USERS = statFromPeriods("New Users", newUsersThisPeriod, newUsersPrevPeriod, series(29, newSignupsDaily.slice(-30)));
 
 const OVERVIEW_SYSTEM_HEALTH: SystemHealthItem[] = [
   { name: "API", level: "good", detail: `${rng.int(80, 180)}ms avg latency` },
@@ -288,8 +286,6 @@ export async function getOverviewData(): Promise<OverviewData> {
   return {
     kpis: [
       KPI_TOTAL_USERS,
-      KPI_ACTIVE_USERS,
-      KPI_NEW_USERS,
       USAGE.researchSessions.stat,
       USAGE.questionsAsked.stat,
       AI_TOTAL_REQUESTS,
